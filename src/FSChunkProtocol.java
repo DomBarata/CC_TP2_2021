@@ -2,40 +2,9 @@ import java.io.*;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 public class FSChunkProtocol implements AutoCloseable {
-    public static class Frame {
-        public final String ipAdress;
-        public final int port;
-        public final String file;
-        public final byte[] data;
-        public Frame(String ipAdress, int port, String file, byte[] data) {
-            this.ipAdress = ipAdress;
-            this.port = port;
-            this.file = file;
-            this.data = data;
-        }
-
-        public Frame(byte[] array){
-            String[] str = new String(array).split("::");
-
-            this.ipAdress = str[0];
-            this.port = Integer.parseInt(str[1]);
-            this.file = str[2];
-            this.data = str[3].getBytes();
-        }
-
-        public byte[] getBytes(){
-            String str;
-
-            str =   this.ipAdress + "::" +
-                    this.port + "::" +
-                    this.file + "::" +
-                    new String(data);
-
-            return str.getBytes();
-        }
-    }
 
     private final DatagramSocket socket;
 
@@ -43,17 +12,32 @@ public class FSChunkProtocol implements AutoCloseable {
         this.socket = datagramSocket;
     }
 
-    public void send(Frame frame){
-        DatagramPacket pedido = new DatagramPacket(frame.getBytes(), frame.getBytes().length, socket.getInetAddress(), socket.getPort());
+    public void send(FSChunk frame){
+        byte[][] aEnviar = fragmenta(frame);
 
         try {
-            socket.send(pedido);
+            for(int i = 0; i < aEnviar.length; i++) {
+                DatagramPacket pedido = new DatagramPacket(aEnviar[i], 1024, socket.getInetAddress(), socket.getPort());
+                socket.send(pedido);
+            }
+
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public Frame receive(){
+    private byte[][] fragmenta(FSChunk frame) {
+        int tam = frame.quantosPackets(1024);
+        byte[][] fragmentado = new byte[tam][1024];
+
+        for(int i = 0; i < tam; i++){
+            fragmentado[i] = frame.getData(i,1024);
+        }
+
+        return fragmentado;
+    }
+
+    public FSChunk receive(){
         byte[] aReceber = new byte[1024];
 
         DatagramPacket pedido = new DatagramPacket(aReceber, aReceber.length);
@@ -64,12 +48,16 @@ public class FSChunkProtocol implements AutoCloseable {
             e.printStackTrace();
         }
 
-        return new Frame(pedido.getData());
+        return new FSChunk(pedido.getAddress().getHostAddress(), pedido.getPort(), pedido.getData());
     }
 
 
     @Override
     public void close() throws Exception {
         this.socket.close();
+    }
+
+    public void send(byte[] bytes) {
+
     }
 }

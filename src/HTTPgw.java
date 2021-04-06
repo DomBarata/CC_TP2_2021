@@ -24,7 +24,7 @@ public class HTTPgw {
         FSChunkProtocol protocol = new FSChunkProtocol(socket);
 
         while(true){
-            FSChunkProtocol.Frame f = protocol.receive();
+            FSChunk f = protocol.receive();
 
             if(!socketInterno.containsKey(f.ipAdress)) {
                 try {

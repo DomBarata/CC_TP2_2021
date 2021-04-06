@@ -20,12 +20,7 @@ public class FastFileServer {
         FSChunkProtocol protocol = new FSChunkProtocol(socket);
         protocol.receive();
 
-        try {
-            protocol.send(new FSChunkProtocol.Frame(InetAddress.getLocalHost().getHostAddress(), 80, "", "".getBytes()));
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-        }
-
+        protocol.send("".getBytes());
 
     }
 }
