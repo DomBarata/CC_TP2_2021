@@ -5,23 +5,20 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 
 public class FastFileServer {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws UnknownHostException {
         String ip = args[0];
         int port = Integer.parseInt(args[1]);
         DatagramSocket socket = null;
 
         try {
              socket = new DatagramSocket();
-             socket.connect(InetAddress.getByName(ip), port);
         } catch (SocketException e) {
-            e.printStackTrace();
-        } catch (UnknownHostException e) {
             e.printStackTrace();
         }
 
         if(socket == null) { System.out.println("Erro a conectar com o gateway"); return;}
 
-        FSChunkProtocol protocol = new FSChunkProtocol(socket);
+        FSChunkProtocol protocol = new FSChunkProtocol(socket,ip,port);
         //protocol.receive();
         protocol.send("".getBytes()); //regista-se junto do HttpGw, indicando o seu IP e porta
         //get dados de file no server

@@ -3,7 +3,7 @@ import java.util.Arrays;
 public class FSChunk {
     public final String ipAdress;
     public final int port;
-    public final String file;
+    public String file;
     public byte[] data;
     public Par par;
     public boolean isfragmented;
@@ -23,10 +23,11 @@ public class FSChunk {
 
         if(array.length != 0){
             String[] str = new String(array).split("::");
-
-            this.isfragmented = Boolean.parseBoolean(str[0]);
-            this.file = str[1];
-            this.data = str[2].getBytes();
+            if(str.length>1) {
+                this.isfragmented = Boolean.parseBoolean(str[0]);
+                this.file = str[1];
+                this.data = str[2].getBytes();
+            }
         }else{
             this.file = "";
             this.data = new byte[0];

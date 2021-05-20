@@ -19,16 +19,12 @@ public class HTTPgw {
         ServerSocket serversocket;
         serversocket = new ServerSocket(8080);
 
-        DatagramSocket socket = null;
-        try {
-            socket = new DatagramSocket(8888);
-        } catch (SocketException e) {
-            e.printStackTrace();
-        }
-        FSChunkProtocol protocol = new FSChunkProtocol(socket);
+        DatagramSocket socket = new DatagramSocket(8888);
+        String ip = InetAddress.getLocalHost().getHostAddress();
+        int port = socket.getLocalPort();
+        FSChunkProtocol protocol = new FSChunkProtocol(socket,ip,port);
 
-        System.out.println("Ativo em " + InetAddress.getLocalHost().getHostAddress() + " " + socket.getLocalPort());
-
+        System.out.println("Ativo em " + ip + " " + port);
 
         //i) fazer o parsing do pedido HTTP GET para extração do nome do ficheiro solicitado;
         //ii) pedir os metadados desse ficheiro a um ou mais dos servidores FastFileSrv
@@ -64,7 +60,7 @@ public class HTTPgw {
                 System.out.println("teste");
                 if(!socketInterno.containsKey(f.ipAdress)) {
                     try {
-                        socketInterno.put(f.ipAdress, new FSChunkProtocol(new DatagramSocket(f.port, InetAddress.getByName(f.ipAdress))));
+                        socketInterno.put(f.ipAdress, new FSChunkProtocol(new DatagramSocket(),f.ipAdress,f.port));
                         System.out.println(f.ipAdress);
                     } catch (SocketException | UnknownHostException e) {
                         e.printStackTrace();
