@@ -9,7 +9,7 @@ public class HTTPgw {
     static Map<String, FSChunkProtocol> socketInterno = new HashMap();
     private static Socket socket;
 
-    // TODO - Socket tcp para comunicar com o HHTP
+    // TODO - Socket tcp para comunicar com o HTTP
     // recebe o pedido e envia a resposta
 
 
@@ -30,31 +30,33 @@ public class HTTPgw {
         //ii) pedir os metadados desse ficheiro a um ou mais dos servidores FastFileSrv
 
 
-            Thread parser = new Thread(() -> {
-                while (true) {
-                    try {
-                        Socket client = serversocket.accept();
-                        DataInputStream clienteIn = new DataInputStream(new BufferedInputStream(client.getInputStream()));
-                        DataOutputStream clienteOut = new DataOutputStream(new BufferedOutputStream(client.getOutputStream()));
+        Thread parser = new Thread(() -> {
+            while (true) {
+                try {
+                    Socket client = serversocket.accept();
+                    DataInputStream clienteIn = new DataInputStream(new BufferedInputStream(client.getInputStream()));
+                    DataOutputStream clienteOut = new DataOutputStream(new BufferedOutputStream(client.getOutputStream()));
 
-                        String httprequest = clienteIn.readUTF();
-                        String[] lista = httprequest.split("\n");
-                        String[] pedido = lista[0].split(" ");
+                    String httprequest = clienteIn.readUTF();
+                    String[] lista = httprequest.split("\n");
+                    String[] pedido = lista[0].split(" ");
 
-                        AtomicInteger i = new AtomicInteger(0);
-                        socketInterno.forEach((key, value) -> {
-                            FSChunk chunk = new FSChunk(key, value.socket.getPort(), pedido[1], i.incrementAndGet(), socketInterno.size(), "".getBytes());
-                            value.send(chunk);
-                        });
+                    AtomicInteger i = new AtomicInteger(0);
+                    socketInterno.forEach((key, value) -> {
+                        System.out.println("oi"+value.socket.getPort());
+                        FSChunk chunk = new FSChunk(key, value.getPorta(), pedido[1], i.incrementAndGet(), socketInterno.size(), "".getBytes());
+                        value.send(chunk);
+                    });
 
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-            });
-            parser.start();
+            }
+        });
+        parser.setName("parser");
+        parser.start();
 
-        Thread udps = new Thread(() -> {
+        Thread udp = new Thread(() -> {
             while(true){
                 FSChunk f = protocol.receive();
                 System.out.println("teste");
@@ -70,6 +72,7 @@ public class HTTPgw {
                 }
             }
         });
-        udps.start();
+        udp.setName("udp");
+        udp.start();
     }
 }

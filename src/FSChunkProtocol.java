@@ -5,6 +5,15 @@ import java.util.Arrays;
 public class FSChunkProtocol implements AutoCloseable {
 
     public final DatagramSocket socket;
+
+    public InetAddress getIp() {
+        return ip;
+    }
+
+    public int getPorta() {
+        return porta;
+    }
+
     public final InetAddress ip;
     public final int porta;
     public final int safeSize = 508;

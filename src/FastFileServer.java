@@ -28,6 +28,7 @@ public class FastFileServer {
         //Dados para saber quantos byte retirar de file
         Par par = dados_mandar.par ;
         String file = dados_mandar.file;
+        System.out.println(file);
 
         try{
                 File temp = File.createTempFile("pattern",".suffix");
