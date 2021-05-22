@@ -29,12 +29,13 @@ public class FSChunkProtocol implements AutoCloseable {
         try {
             for(int i = 0; i < aEnviar.length; i++) {
                 DatagramPacket pedido = new DatagramPacket(aEnviar[i], safeSize, ip, porta);
+                System.out.println("sending...");
                 socket.send(pedido);
             }
-
         } catch (IOException e) {
             e.printStackTrace();
         }
+        System.out.println("files were sent!");
     }
 
     public void send(byte[] bytes) {

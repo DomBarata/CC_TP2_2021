@@ -3,8 +3,6 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 
 public class FastFileServer {
     public static void main(String[] args) throws UnknownHostException {
@@ -33,19 +31,13 @@ public class FastFileServer {
         System.out.println(file);
 
         try{
-            //file = getficheiro
-            byte[] metadados = Files.readAllBytes(Paths.get(file));
-            //getPar2
-            int de = par.getA();
-            int partitions = par.getB();
+                File temp = File.createTempFile("pattern",".suffix");
+                temp.deleteOnExit();
 
-            //nr_byte = file.data/par.b
-            //inicio = nr_bytes*par.a
-            //fim = nr_bytes*(par.a +1)
-            //bytes_read = byte[] frag = Arrays.copyOfRange(file.data, inicio,fim);
-            //FSChunk fc = new FSChunk(file.getname(), par.a, par.b, bytes_read)
-            //protocol.send(bytes_read)
 
+                //BufferedWriter out = new BufferedWriter(new FileWriter(temp));
+                //out.write("aString");
+                //out.close();
 
 
         } catch (Exception e) {

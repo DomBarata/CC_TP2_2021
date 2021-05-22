@@ -1,5 +1,10 @@
+import com.sun.net.httpserver.HttpServer;
+
 import java.io.*;
 import java.net.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -16,8 +21,8 @@ public class HTTPgw {
     public static void main(String[] args) throws IOException {
 
         //TODO - Conexão com o exterior
-        ServerSocket serversocket;
-        serversocket = new ServerSocket(8080);
+        //ServerSocket serversocket;
+        //serversocket = new ServerSocket(8080);
 
         DatagramSocket socket = new DatagramSocket(8888);
         String ip = InetAddress.getLocalHost().getHostAddress();
@@ -31,26 +36,36 @@ public class HTTPgw {
 
 
         Thread parser = new Thread(() -> {
+            try {
+            HttpServer server = HttpServer.create(new InetSocketAddress("localhost",8080),0);
+            server.start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
             while (true) {
-                try {
+                //try {
+                /*
                     Socket client = serversocket.accept();
+                    System.out.println("connected");
                     DataInputStream clienteIn = new DataInputStream(new BufferedInputStream(client.getInputStream()));
                     DataOutputStream clienteOut = new DataOutputStream(new BufferedOutputStream(client.getOutputStream()));
+*/
 
-                    String httprequest = clienteIn.readUTF();
-                    String[] lista = httprequest.split("\n");
-                    String[] pedido = lista[0].split(" ");
 
-                    AtomicInteger i = new AtomicInteger(0);
-                    socketInterno.forEach((key, value) -> {
-                        System.out.println("oi"+value.socket.getPort());
-                        FSChunk chunk = new FSChunk(key, value.getPorta(), pedido[1], i.incrementAndGet(), socketInterno.size(), "".getBytes());
-                        value.send(chunk);
-                    });
+                    //String httprequest = clienteIn.readUTF();
+                    //String[] lista = httprequest.split("\n");
+                    //String[] pedido = lista[0].split(" ");
+                    //System.out.println(pedido[1]);
 
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                    //AtomicInteger i = new AtomicInteger(0);
+                    //socketInterno.forEach((key, value) -> {
+                    //    FSChunk chunk = new FSChunk(key, value.getPorta(), pedido[1], i.incrementAndGet(), socketInterno.size(), "".getBytes());
+                    //    value.send(chunk);
+                    //});
+
+               // } catch (IOException e) {
+                //    e.printStackTrace();
+                //}
             }
         });
         parser.setName("parser");

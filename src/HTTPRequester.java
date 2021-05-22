@@ -1,27 +1,29 @@
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.InetAddress;
-import java.net.Socket;
-import java.net.URL;
+import java.net.*;
+import java.net.http.HttpRequest;
+import java.nio.file.Paths;
+import java.time.Duration;
 
-public class HTTPRequester implements AutoCloseable {
-    private Socket socket;
+public class HTTPRequester {
+    private URL url;
+    private HttpURLConnection urlConnection;
     private DataInputStream in;
     private DataOutputStream out;
 
     public HTTPRequester() throws IOException {
-        socket = new Socket("localhost" ,8080);
-        in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-        out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+        this.url = new URL("http://localhost:8080");
+        this.urlConnection = (HttpURLConnection) url.openConnection();
+        urlConnection.setDoOutput(true);
+        //this.in = new DataInputStream(new BufferedInputStream(urlConnection.getInputStream()));
+        //this.out = new DataOutputStream(new BufferedOutputStream(urlConnection.getOutputStream()));
     }
 
     public void send(String fich) throws IOException {
-        URL url = new URL("http://localhost:8080");
-        HttpURLConnection con = (HttpURLConnection) url.openConnection();
-        con.setRequestMethod("GET");
-        con.setRequestProperty("accept", "application/json");
-        InputStream responseStream = con.getInputStream();
-        System.out.println(responseStream);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://openjdk.java.net/"))
+                .timeout(Duration.ofMinutes(1))
+                .header("Content-Type", "application/json")
+                .GET().build();
 
         //out.writeUTF("GET " +fich+" HTTP/1.1");
         //out.flush();
@@ -32,17 +34,10 @@ public class HTTPRequester implements AutoCloseable {
         System.out.println(answer);
     }
 
-
-    @Override
-    public void close() throws Exception {
-        this.socket.close();
-    }
-
-
     public static void main(String[] args) throws IOException {
         HTTPRequester request = new HTTPRequester();
         request.send("img.png");
-        //request.receive();
+        request.receive();
     }
 
 
