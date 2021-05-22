@@ -1,12 +1,15 @@
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.UnknownHostException;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 
 public class test {
-    public static void main(String[] args) throws UnknownHostException {
+/*    public static void main(String[] args) throws UnknownHostException {
        // System.out.println(InetAddress.getLocalHost());
-/*
+
         System.out.println(InetAddress.getByName(InetAddress.getLocalHost().getHostName()));
         System.out.println(InetAddress.getLocalHost().getHostAddress());
         System.out.println(InetAddress.getByName("10.1.1.1"));
@@ -39,7 +42,7 @@ public class test {
         System.out.println(str[0] + " " + str[1] + " " + str[2] + " ");
 
     */
-
+/*
         DatagramSocket socket = null;
 
         try {
@@ -52,4 +55,25 @@ public class test {
         }
 
     }
+*/
+public static void main(String[] args) throws Exception {
+    InetSocketAddress adress = new InetSocketAddress(8000);
+    HttpServer server = HttpServer.create(adress, 0);
+    server.createContext("/test", new MyHandler());
+    server.setExecutor(null); // creates a default executor
+    server.start();
 }
+
+    static class MyHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange t) throws IOException {
+            String response = "This is the response";
+            t.sendResponseHeaders(200, response.length());
+            OutputStream os = t.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
+        }
+    }
+
+}
+

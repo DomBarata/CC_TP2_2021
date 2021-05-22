@@ -1,93 +1,104 @@
-import com.sun.net.httpserver.HttpServer;
-
 import java.io.*;
 import java.net.*;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.util.Date;
+import java.nio.file.Files;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class HTTPgw {
     // Socket UDP para comunicar com o 'FastFileServer'
-    static Map<String, FSChunkProtocol> socketInterno = new HashMap();
+    public static Map<String, FSChunkProtocol> socketInterno = new HashMap();
+    public static Map<String,List<String>> ficheirosServer = new HashMap<>();
     private static Socket socket;
-
-    // TODO - Socket tcp para comunicar com o HTTP
-    // recebe o pedido e envia a resposta
-
+    private final static String password = "PASSWORD";
 
     public static void main(String[] args) throws IOException {
+        ServerSocket serversocket;
+        serversocket = new ServerSocket(8080);
 
-        //TODO - Conexão com o exterior
-        //ServerSocket serversocket;
-        //serversocket = new ServerSocket(8080);
+        DatagramSocket socket = null;
+        try {
+            socket = new DatagramSocket(8888);
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        FSChunkProtocol protocol = new FSChunkProtocol(socket);
 
-        DatagramSocket socket = new DatagramSocket(8888);
-        String ip = InetAddress.getLocalHost().getHostAddress();
-        int port = socket.getLocalPort();
-        FSChunkProtocol protocol = new FSChunkProtocol(socket,ip,port);
-
-        System.out.println("Ativo em " + ip + " " + port);
+        System.out.println("Ativo em " + InetAddress.getLocalHost().getHostAddress() + " " + socket.getLocalPort());
 
         //i) fazer o parsing do pedido HTTP GET para extração do nome do ficheiro solicitado;
         //ii) pedir os metadados desse ficheiro a um ou mais dos servidores FastFileSrv
+            Thread parser = new Thread(() -> {
+                try {
+                    File file = new File("logo_spc.jpg");
 
-
-        Thread parser = new Thread(() -> {
-            try {
-            HttpServer server = HttpServer.create(new InetSocketAddress("localhost",8080),0);
-            server.start();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-            while (true) {
-                //try {
-                /*
                     Socket client = serversocket.accept();
-                    System.out.println("connected");
                     DataInputStream clienteIn = new DataInputStream(new BufferedInputStream(client.getInputStream()));
                     DataOutputStream clienteOut = new DataOutputStream(new BufferedOutputStream(client.getOutputStream()));
-*/
+                    BufferedReader br = new BufferedReader(new InputStreamReader(clienteIn));
+                    String httprequest = br.readLine();
+                    String []request = httprequest.split(" ");
+                    String ficheiro = request[1].substring(1);
+
+                    System.out.println(ficheiro);
+
+                    byte[] bytes = Files.readAllBytes(file.toPath());
+
+                    clienteOut.write("HTTP/1.1 200 OK\r\n".getBytes());
+                    clienteOut.write(("Content-Length: " + bytes.length  + "\r\n").getBytes());
+                    clienteOut.write("Content-Type: image/jpeg;\r\n\r\n".getBytes());
+                    clienteOut.write(bytes);
+                    clienteOut.flush();
 
 
-                    //String httprequest = clienteIn.readUTF();
-                    //String[] lista = httprequest.split("\n");
-                    //String[] pedido = lista[0].split(" ");
-                    //System.out.println(pedido[1]);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
 
-                    //AtomicInteger i = new AtomicInteger(0);
-                    //socketInterno.forEach((key, value) -> {
-                    //    FSChunk chunk = new FSChunk(key, value.getPorta(), pedido[1], i.incrementAndGet(), socketInterno.size(), "".getBytes());
-                    //    value.send(chunk);
-                    //});
+            });
+            parser.start();
 
-               // } catch (IOException e) {
-                //    e.printStackTrace();
-                //}
-            }
-        });
-        parser.setName("parser");
-        parser.start();
 
-        Thread udp = new Thread(() -> {
+        Thread udps = new Thread(() -> {
             while(true){
                 FSChunk f = protocol.receive();
-                System.out.println("teste");
-                if(!socketInterno.containsKey(f.ipAdress)) {
-                    try {
-                        socketInterno.put(f.ipAdress, new FSChunkProtocol(new DatagramSocket(),f.ipAdress,f.port));
-                        System.out.println(f.ipAdress);
-                    } catch (SocketException | UnknownHostException e) {
-                        e.printStackTrace();
-                    }
-                }else{
+                switch (f.tag){
+                    case "A" :  // Autenticação by Server
+                        if(!socketInterno.containsKey(f.senderIpAddress) && password.equals(new String(f.data))) {
+                            try {
+                                socketInterno.put(f.senderIpAddress, new FSChunkProtocol(new DatagramSocket(f.senderPort, InetAddress.getByName(f.senderIpAddress))));
+                                System.out.println(f.senderIpAddress);
+                            } catch (SocketException | UnknownHostException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        break;
+                    case "FS" : // File send by Server
 
+                        break;
+                    case "LR" : // List of files sent by Server
+                        List<String> ficheiros = f.getDataList();
+                        ficheirosServer.put(f.senderIpAddress,ficheiros);
+                        break;
+                    case "CLOSE" :
+                        FSChunkProtocol fs = socketInterno.remove(f.senderIpAddress);
+                        ficheirosServer.remove(f.senderIpAddress);
+                        try {
+                            fs.close();
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                        break;
+                    case "EMPTY" :
+                        break;
+                    default :
+                        System.out.println("ERRO HTTPGW:80 (switch udps)");
+                        System.out.println("TAG recebida : " + f.tag);
+                                break;
                 }
+
             }
         });
-        udp.setName("udp");
-        udp.start();
+        udps.start();
     }
 }
