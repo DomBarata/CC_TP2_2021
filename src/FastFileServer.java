@@ -1,6 +1,7 @@
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
@@ -11,6 +12,8 @@ import java.util.List;
 
 
 public class FastFileServer {
+    private static FSChunkProtocol protocol;
+
     public static void main(String[] args) throws UnknownHostException {
         String ip = args[0];
         int port = Integer.parseInt(args[1]);
@@ -24,17 +27,26 @@ public class FastFileServer {
 
         if(socket == null) { System.out.println("Erro a conectar com o gateway"); return;}
 
-        FSChunkProtocol protocol = new FSChunkProtocol(socket);
+        protocol = new FSChunkProtocol(socket, ip, port);
+
+
         //protocol.receive();
         FSChunk autentica = new FSChunk("A","PASSWORD".getBytes());
         protocol.send(autentica); //Autentica-se junto do HttpGw, indicando o seu IP e porta e confirmando a PASSWORD
         //get dados de file no server
 
-        FSChunk chunk = protocol.receive();
+        FSChunk chunk = null;
+        try {
+            chunk = protocol.receive();
+        } catch (IOException e) {
+            System.out.println("Conexão perdida...");
+            return;
+        }
 
+        FSChunk finalChunk = chunk;
         Thread response = new Thread(() -> {
             try {
-                processChunks(chunk, protocol);
+                processChunks(finalChunk, protocol);
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -45,7 +57,7 @@ public class FastFileServer {
 
     }
 
-    public static void processChunks(FSChunk received,FSChunkProtocol connection){
+    private static void processChunks(FSChunk received,FSChunkProtocol connection){
         String tag = received.tag;
         try {
             switch (tag) {

@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.util.*;
 
 public class test {
 /*    public static void main(String[] args) throws UnknownHostException {
@@ -56,6 +57,7 @@ public class test {
 
     }
 */
+    /*
 public static void main(String[] args) throws Exception {
     InetSocketAddress adress = new InetSocketAddress(8000);
     HttpServer server = HttpServer.create(adress, 0);
@@ -73,7 +75,20 @@ public static void main(String[] args) throws Exception {
             os.write(response.getBytes());
             os.close();
         }
-    }
+        }
+    */
+    public static void main(String[] args) {
+        Map<Integer, List<Integer>> map = new HashMap<>();
+        List<Integer> lista = new ArrayList<>();
+        lista.add(1);
+        lista.add(2);
+        lista.add(3);
+        map.put(1,lista);
+        for(Integer i : lista){
+            map.get(i).add(10);
+            map.get(i).forEach(inteiro -> System.out.println(inteiro));
+        }
 
+    }
 }
 
