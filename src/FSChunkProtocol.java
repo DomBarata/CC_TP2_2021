@@ -1,6 +1,7 @@
 import java.io.IOException;
 import java.net.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class FSChunkProtocol implements AutoCloseable {
@@ -41,7 +42,7 @@ public class FSChunkProtocol implements AutoCloseable {
 
         try {
             for(int i = 0; i < aEnviar.length; i++) { //falta ver o safe size
-                DatagramPacket pedido = new DatagramPacket(aEnviar[i], aEnviar.length, this.ipDestino, this.portaDestino);
+                DatagramPacket pedido = new DatagramPacket(aEnviar[i], aEnviar[i].length, this.ipDestino, this.portaDestino);
                 socket.send(pedido);
             }
 
@@ -64,7 +65,7 @@ public class FSChunkProtocol implements AutoCloseable {
 
     private byte[][] fragmenta(FSChunk frame) {
         int tam = frame.quantosPackets(safeSize);
-        byte[][] fragmentado = new byte[tam][safeSize];
+        byte[][] fragmentado = new byte[tam][];
 
         for(int i = 0; i < tam; i++){
             fragmentado[i] = frame.getData(i,safeSize);
@@ -77,12 +78,12 @@ public class FSChunkProtocol implements AutoCloseable {
 
         byte[] aReceber = new byte[safeSize];
 
-        DatagramPacket pedido = new DatagramPacket(aReceber, aReceber.length);
+        DatagramPacket pedido = new DatagramPacket(aReceber, safeSize);
 
 
         socket.receive(pedido);
 
-        FSChunk pacote = new FSChunk(pedido.getAddress().getHostName(), pedido.getPort(), pedido.getData());
+        FSChunk pacote = new FSChunk(pedido.getAddress().getHostAddress(), pedido.getPort(), trim(pedido.getData()));
 
         while(pacote.isfragmented){
             try {
@@ -101,5 +102,16 @@ public class FSChunkProtocol implements AutoCloseable {
     @Override
     public void close() throws Exception {
         this.socket.close();
+    }
+
+    static byte[] trim(byte[] bytes)
+    {
+        int i = bytes.length - 1;
+        while (i >= 0 && bytes[i] == 0)
+        {
+            --i;
+        }
+
+        return Arrays.copyOf(bytes, i + 1);
     }
 }

@@ -61,8 +61,8 @@ public class FSChunk {
         this.senderIpAddress = address;
         this.senderPort = port;
         if(array.length != 0){
-            String[] str = new String(array).split("::");
-
+            String string = new String(array);
+            String[] str = string.split("::");
             this.isfragmented = Boolean.parseBoolean(str[0]);
             this.tag = str[1];
             this.file = str[2];

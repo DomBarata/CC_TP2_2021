@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -7,34 +8,37 @@ import java.util.concurrent.locks.ReentrantLock;
 public class HTTPgw {
     // Socket UDP para comunicar com o 'FastFileServer'
     public static Map<String, FSChunkProtocol> socketInterno = new HashMap();
-    public static Map<String,List<String>> ficheirosServer = new HashMap<>();
     private final static String password = "PASSWORD";
-    private static int id = 0;
-    private static Map<Integer,Par> pedidosClientes;
-    private final static ReentrantLock clientlock = new ReentrantLock();
+    public static Map<String,List<String>> ficheirosServer = new HashMap<>();
+
     private static Map<String,byte[]> fileData = new HashMap<>(); // ficheiro :: Dados
-    private static FSChunkProtocol protocol;
+    private static FSChunkProtocol udpReceiveProtocol;
+
+    private final static ReentrantLock clientlock = new ReentrantLock();
+    private static final Condition condition = clientlock.newCondition();
 
     public static void main(String[] args) throws IOException {
 
-        ServerSocket serversocket;
-        serversocket = new ServerSocket(8080);
+        ServerSocket httpSocket;
+        httpSocket = new ServerSocket(8080);
 
-        DatagramSocket socket = null;
+        DatagramSocket udpReceiveSocket = null;
         try {
-            socket = new DatagramSocket(8888);
+            udpReceiveSocket = new DatagramSocket(8888);
         } catch (SocketException e) {
             e.printStackTrace();
         }
-        protocol = new FSChunkProtocol(socket);
 
-        System.out.println("Ativo em " + InetAddress.getLocalHost().getHostAddress() + " " + socket.getLocalPort());
+        udpReceiveProtocol = new FSChunkProtocol(udpReceiveSocket);
+
+        System.out.println("Ativo em " + InetAddress.getLocalHost().getHostAddress() + " " + udpReceiveSocket.getLocalPort());
 
         Thread parser = new Thread(() -> {
-            while(true) {
+            while (true) {
                 try {
                     //HTTP GET
-                    Socket client = serversocket.accept();
+                    Socket client = httpSocket.accept();
+                    System.out.println("ola");
                     Thread t = new Thread(new WorkerHTTP(client));
                     t.start();
                 } catch (IOException e) {
@@ -45,62 +49,74 @@ public class HTTPgw {
         parser.start();
 
 
-        Thread udpreceive = new Thread(() -> {
-            while(true){
+        Thread udpReceiveThread = new Thread(() -> {
+            while (true) {
                 FSChunk f = null;
                 try {
-                    f = protocol.receive();
+                    f = udpReceiveProtocol.receive();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-                if(f!=null) {
+                if (f != null) {
                     switch (f.tag) {
                         case "A":  // Autenticação by Server
-                            if (!socketInterno.containsKey(f.senderIpAddress) && password.equals(new String(f.data))) {
-                                try {
-                                    FSChunkProtocol newCon = new FSChunkProtocol(new DatagramSocket(f.senderPort, InetAddress.getByName(f.senderIpAddress)),f.senderIpAddress,f.senderPort);
-                                    socketInterno.put(f.senderIpAddress, newCon);
-                                    System.out.println("Novo servidor autenticado: " + f.senderIpAddress);
-                                    FSChunk listOfFiles = new FSChunk("LR", "".getBytes());
-                                    newCon.send(listOfFiles);
-                                } catch (SocketException | UnknownHostException e) {
-                                    e.printStackTrace();
-                                }
-                            } else
-                                System.out.println("Tentativa da ataque!!!!");
-                            break;
+                                    if (!socketInterno.containsKey(f.senderIpAddress) && password.equals(new String(f.data))) {
+                                        try {
+                                            FSChunkProtocol newCon = new FSChunkProtocol(new DatagramSocket(), f.senderIpAddress, f.senderPort);
+
+                                            socketInterno.put(f.senderIpAddress, newCon);
+                                            System.out.println("Novo servidor autenticado: " + f.senderIpAddress);
+                                            FSChunk listOfFiles = new FSChunk("LR", "".getBytes());
+                                            newCon.send(listOfFiles);
+                                        } catch (SocketException | UnknownHostException e) {
+                                            e.printStackTrace();
+                                        }
+                                    } else
+                                        System.out.println("Tentativa da ataque!!!!");
+                                    break;
+                        case "LR": // List of files sent by Server
+                                    List<String> ficheiros = f.getDataList();
+                                    for (String fich : ficheiros) {
+                                        if (ficheirosServer.containsKey(fich))
+                                            ficheirosServer.get(fich).add(f.senderIpAddress);
+                                        else {
+                                            List<String> l = new ArrayList<>();
+                                            l.add(f.senderIpAddress);
+                                            ficheirosServer.put(fich, l);
+                                        }
+                                    }
+                                    break;
                         case "FS":
-                            fileData.put(f.file, f.data);
-                            Par conditions;
-                            for(Map.Entry<Integer,Par> entry : pedidosClientes.entrySet()){
-                                if(entry.getValue().equals(f.file)){
-                                    conditions = pedidosClientes.remove(entry.getKey());
-                                    conditions.getCondition().signal();
-                                }
-                            }
+                                    fileData.put(f.file, f.data);
+                                    condition.signalAll();
+                                    break;
+                        case "CLOSE":
+                                    FSChunkProtocol fs = socketInterno.remove(f.senderIpAddress);
+                                    ficheirosServer.remove(f.senderIpAddress);
+                                    try {
+                                        fs.close();
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                    break;
                         case "EMPTY":
-                            break;
                         default:
-                            System.out.println("ERRO HTTPGW:89 (switch udps)");
-                            System.out.println("TAG recebida : " + f.tag);
-                            break;
+                                    System.out.println("ERRO HTTPGW:89 (switch udps)");
+                                    System.out.println("TAG recebida : " + f.tag);
+                                    break;
                     }
                 }
             }
         });
-        udpreceive.start();
-
+        udpReceiveThread.start();
+/*
         Thread udpsender = new Thread(() -> {
             while(true){
                 FSChunk f = null;
                 try {
-                    f = protocol.receive();
+                    f = udpReceiveProtocol.receive();
                 } catch (IOException e) {
-                    try {
-                        fs.close();
-                    } catch (Exception exception) {
-                        exception.printStackTrace();
-                    }
+                    e.printStackTrace();
                 }
                 if(f!=null) {
                     switch (f.tag) {
@@ -139,6 +155,7 @@ public class HTTPgw {
             }
         });
         udpsender.start();
+*/
     }
 
     private static String getExtensao(String filename){
@@ -166,10 +183,7 @@ public class HTTPgw {
             case "pdf" -> "application/pdf";
             default -> "text/plain";
         };
-
     }
-
-    
 
     static class WorkerHTTP implements Runnable{
         private Socket client;
@@ -181,6 +195,7 @@ public class HTTPgw {
         private FSChunkProtocol selectServer(String ficheiro){
             FSChunkProtocol destino = null;
             Random random = new Random();
+            //TODO - verificar se há FFSrvs
             int r = random.nextInt(ficheirosServer.get(ficheiro).size());
             String s = ficheirosServer.get(ficheiro).get(r);
             destino = socketInterno.get(s);
@@ -190,8 +205,6 @@ public class HTTPgw {
         public void run() {
             clientlock.lock();
             try {
-
-                Condition cond = clientlock.newCondition();
                 DataInputStream clienteIn = new DataInputStream(new BufferedInputStream(client.getInputStream()));
                 DataOutputStream clienteOut = new DataOutputStream(new BufferedOutputStream(client.getOutputStream()));
                 BufferedReader br = new BufferedReader(new InputStreamReader(clienteIn));
@@ -201,10 +214,10 @@ public class HTTPgw {
 
                 System.out.println(ficheiro);
 
-
+                if(!fileData.containsKey(ficheiro))
+                    selectServer(ficheiro).send(new FSChunk("FR", ficheiro, "".getBytes()));
                 while(!fileData.containsKey(ficheiro)) {
-                    cond.await();
-
+                    condition.await();
                 }
 
                 //HTTP RESPONSE
