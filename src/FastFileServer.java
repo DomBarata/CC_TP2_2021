@@ -57,6 +57,7 @@ public class FastFileServer {
 
     }
 
+    //FALTA RECEBER O PATH
     private static void processChunks(FSChunk received,FSChunkProtocol connection){
         String tag = received.tag;
         try {
@@ -64,7 +65,7 @@ public class FastFileServer {
                 case "LR":
                     //GET LIST OF FILE NAMES
                     List <String> ficheiros = new ArrayList<String>();
-                    File[] files = new File("/").listFiles();
+                    File[] files = new File("/path").listFiles();
                     ByteArrayOutputStream bytearray = new ByteArrayOutputStream();
                     DataOutputStream out = new DataOutputStream(bytearray);
                     for(File f: files) {

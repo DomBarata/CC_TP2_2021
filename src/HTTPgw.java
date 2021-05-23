@@ -3,6 +3,8 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class HTTPgw {
     // Socket UDP para comunicar com o 'FastFileServer'
@@ -28,40 +30,21 @@ public class HTTPgw {
         System.out.println("Ativo em " + InetAddress.getLocalHost().getHostAddress() + " " + socket.getLocalPort());
 
         Thread parser = new Thread(() -> {
-            try {
-                //HTTP GET
-                Socket client = serversocket.accept();
-                DataInputStream clienteIn = new DataInputStream(new BufferedInputStream(client.getInputStream()));
-                DataOutputStream clienteOut = new DataOutputStream(new BufferedOutputStream(client.getOutputStream()));
-                BufferedReader br = new BufferedReader(new InputStreamReader(clienteIn));
-                String httprequest = br.readLine();
-                String []request = httprequest.split(" ");
-                String ficheiro = request[1].substring(1);
-
-                System.out.println(ficheiro);
-                filename.add(ficheiro);
-
-                //request UDP ir e vir
-                //await()
-                //vars de condição?
-
-                //HTTP RESPONSE
-                clienteOut.write("HTTP/1.1 200 OK\r\n".getBytes());
-                clienteOut.write(("Content-Length: " + fileData.get(ficheiro).length  + "\r\n").getBytes());
-                clienteOut.write(("Content-Type: " + getExtensao(ficheiro) + ";\r\n\r\n").getBytes());
-                clienteOut.write(fileData.get(ficheiro));
-                clienteOut.flush();
-                filename.remove(ficheiro);
-
-            } catch (IOException e) {
-                e.printStackTrace();
+            while(true) {
+                try {
+                    //HTTP GET
+                    Socket client = serversocket.accept();
+                    Thread t = new Thread(new WorkerHTTP(client));
+                    t.start();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
-
         });
         parser.start();
 
 
-        Thread udps = new Thread(() -> {
+        Thread udpreceive = new Thread(() -> {
             while(true){
                 FSChunk f = null;
                 try {
@@ -95,7 +78,7 @@ public class HTTPgw {
                 }
             }
         });
-        udps.start();
+        udpreceive.start();
 
         Thread udpsender = new Thread(() -> {
             while(true){
