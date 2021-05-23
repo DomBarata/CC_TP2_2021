@@ -92,22 +92,10 @@ public class HTTPgw {
 
         Thread udpsender = new Thread(() -> {
             while(true){
-                FSChunkProtocol destino = null;
-                if(!filename.isEmpty()) {
-                    String file = filename.get(0);
-                    FSChunk toSend = new FSChunk("FR", file, "".getBytes());
-                    Random random = new Random();
-                    int r = random.nextInt(ficheirosServer.get(file).size());
-                    String s = ficheirosServer.get(file).get(r);
-                    destino = socketInterno.get(s);
-                    destino.send(toSend);
-                }
                 FSChunk f = null;
                 try {
                     f = protocol.receive();
                 } catch (IOException e) {
-                    FSChunkProtocol fs = socketInterno.remove(destino.socket.getLocalAddress().getHostName());
-                    ficheirosServer.remove(destino.socket.getLocalAddress().getHostName());
                     try {
                         fs.close();
                     } catch (Exception exception) {
@@ -180,4 +168,58 @@ public class HTTPgw {
         };
 
     }
+
+    
+
+    static class WorkerHTTP implements Runnable{
+        private Socket client;
+
+        public WorkerHTTP(Socket socket){
+            this.client = socket;
+        }
+
+        private FSChunkProtocol selectServer(String ficheiro){
+            FSChunkProtocol destino = null;
+            Random random = new Random();
+            int r = random.nextInt(ficheirosServer.get(ficheiro).size());
+            String s = ficheirosServer.get(ficheiro).get(r);
+            destino = socketInterno.get(s);
+            return destino;
+        }
+
+        public void run() {
+            clientlock.lock();
+            try {
+
+                Condition cond = clientlock.newCondition();
+                DataInputStream clienteIn = new DataInputStream(new BufferedInputStream(client.getInputStream()));
+                DataOutputStream clienteOut = new DataOutputStream(new BufferedOutputStream(client.getOutputStream()));
+                BufferedReader br = new BufferedReader(new InputStreamReader(clienteIn));
+                String httprequest = br.readLine();
+                String[] request = httprequest.split(" ");
+                String ficheiro = request[1].substring(1);
+
+                System.out.println(ficheiro);
+
+
+                while(!fileData.containsKey(ficheiro)) {
+                    cond.await();
+
+                }
+
+                //HTTP RESPONSE
+                clienteOut.write("HTTP/1.1 200 OK\r\n".getBytes());
+                clienteOut.write(("Content-Length: " + fileData.get(ficheiro).length + "\r\n").getBytes());
+                clienteOut.write(("Content-Type: " + getExtensao(ficheiro) + ";\r\n\r\n").getBytes());
+                clienteOut.write(fileData.get(ficheiro));
+                clienteOut.flush();
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            } finally{
+                clientlock.unlock();
+            }
+                
+        }
+    }
+
 }
