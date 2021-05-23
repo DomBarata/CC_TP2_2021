@@ -1,7 +1,5 @@
 import java.io.*;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -11,10 +9,13 @@ public class HTTPgw {
     public static Map<String, FSChunkProtocol> socketInterno = new HashMap();
     public static Map<String,List<String>> ficheirosServer = new HashMap<>();
     private final static String password = "PASSWORD";
+    private static int id = 0;
+    private static Map<Integer,Par> pedidosClientes;
+    private final static ReentrantLock clientlock = new ReentrantLock();
+    private static Map<String,byte[]> fileData = new HashMap<>(); // ficheiro :: Dados
+    private static FSChunkProtocol protocol;
 
     public static void main(String[] args) throws IOException {
-        ArrayList<String> filename = new ArrayList<>();
-        Map<String,byte[]> fileData = new HashMap<>();
 
         ServerSocket serversocket;
         serversocket = new ServerSocket(8080);
@@ -25,7 +26,7 @@ public class HTTPgw {
         } catch (SocketException e) {
             e.printStackTrace();
         }
-        FSChunkProtocol protocol = new FSChunkProtocol(socket);
+        protocol = new FSChunkProtocol(socket);
 
         System.out.println("Ativo em " + InetAddress.getLocalHost().getHostAddress() + " " + socket.getLocalPort());
 
@@ -68,6 +69,15 @@ public class HTTPgw {
                             } else
                                 System.out.println("Tentativa da ataque!!!!");
                             break;
+                        case "FS":
+                            fileData.put(f.file, f.data);
+                            Par conditions;
+                            for(Map.Entry<Integer,Par> entry : pedidosClientes.entrySet()){
+                                if(entry.getValue().equals(f.file)){
+                                    conditions = pedidosClientes.remove(entry.getKey());
+                                    conditions.getCondition().signal();
+                                }
+                            }
                         case "EMPTY":
                             break;
                         default:

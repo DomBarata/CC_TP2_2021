@@ -1,6 +1,9 @@
+import java.util.concurrent.locks.Condition;
+
 public class Par {
-    private int a;
-    private int b;
+    private final String fileName;
+    private final Condition cond;
+
 
     public Par(String filename, Condition cond) {
         this.fileName = filename;
