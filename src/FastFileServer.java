@@ -1,10 +1,7 @@
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -60,6 +57,7 @@ public class FastFileServer {
 
     }
 
+
     //FALTA RECEBER O PATH
     private static void processChunks(FSChunk received,FSChunkProtocol connection){
         String tag = received.tag;
@@ -70,17 +68,7 @@ public class FastFileServer {
                         System.out.println("A receber pedido de ficheiros");
                         //GET LIST OF FILE NAMES
                         List<String> ficheiros = new ArrayList<String>();
-                        File[] files = new File(".").listFiles();
-                        ByteArrayOutputStream bytearray = new ByteArrayOutputStream();
-                        DataOutputStream out = new DataOutputStream(bytearray);
-                        System.out.println("Lista de ficheiros: ");
-                        for (File f : files) {
-                            if (f.isFile()) {
-                                ficheiros.add(f.getName());
-                                System.out.println("\t- " + f.getName());
-                            }
-                        }
-                        FSChunk fsc = new FSChunk("LR", "".getBytes());
+                        FSChunk fsc = new FSChunk("LR", getFiles());
                         fsc.setData(ficheiros);
                         connection.send(fsc);
                         System.out.println("Lista de ficheiros enviada!!");
@@ -96,6 +84,18 @@ public class FastFileServer {
                         System.out.println("Ficheiro enviado!");
                     }
                     break;
+                case "RESEND" :
+                    int pos = Integer.parseInt(received.file.substring(received.file.length()-4));
+                    if(!received.file.isEmpty()) {
+                        //TODO - VERIFICAR MÉTODO GETFRAGMENT NO FSCHUNK
+                        byte[] fragment = received.getFragment(pos, protocolToSend.safeSize, Files.readAllBytes(Paths.get(received.file)));
+                        FSChunk fragmentResend = new FSChunk("RESEND",received.file,fragment);
+                        connection.send(fragmentResend);
+                    }else{
+                        byte[] fragment = received.getFragment(pos, protocolToSend.safeSize, getFiles());
+                        FSChunk fragmentResend = new FSChunk("RESEND", fragment);
+                        connection.send(fragmentResend);
+                    }
                 case "CLOSE" :
                     //SEND CLOSE TAG AND CLOSE UDP CONNECTION
                     FSChunk fecha = new FSChunk("CLOSE","".getBytes());
@@ -112,6 +112,25 @@ public class FastFileServer {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private static byte[] getFiles(){
+        List<String> ficheiros = new ArrayList<String>();
+        File[] files = new File(".").listFiles();
+        ByteArrayOutputStream bytearray = new ByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(bytearray);
+        System.out.println("Lista de ficheiros: ");
+        for (File f : files) {
+            if (f.isFile()) {
+                ficheiros.add(f.getName());
+                System.out.println("\t- " + f.getName());
+            }
+        }
+        String data = "";
+        for (String s : ficheiros){
+            data += ":/" + s;
+        }
+        return data.getBytes();
     }
 
 }

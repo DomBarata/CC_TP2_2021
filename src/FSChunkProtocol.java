@@ -60,33 +60,14 @@ public class FSChunkProtocol implements AutoCloseable {
         return fragmentado;
     }
 
-    public FSChunk receive() throws IOException { //TODO - Retransmissão
-
+    public FSChunk receive() throws IOException {
         System.out.println("À escuta...");
         byte[] aReceber = new byte[safeSize];
 
         DatagramPacket pedido = new DatagramPacket(aReceber, safeSize);
 
-
         socket.receive(pedido);
-        int pckNum = 0;
         FSChunk pacote = new FSChunk(pedido.getAddress().getHostAddress(), pedido.getPort(), trim(pedido.getData()));
-       // pckNum  = Integer.parseInt(pacote.file.substring(pacote.file.length()-4));
-        while(pacote.isfragmented){
-            System.out.println("A unir fragmentos de dados...");
-            try {
-                socket.send(new DatagramPacket(String.valueOf(pckNum+1).getBytes(), String.valueOf(pckNum+1).getBytes().length , socket.getInetAddress(), socket.getPort()));
-                socket.receive(pedido);
-                FSChunk aux = new FSChunk(trim(pedido.getData()));
-                pckNum = Integer.parseInt(aux.file.substring(aux.file.length()-4));
-                pacote.complete(aux);
-            }catch (SocketTimeoutException E){
-                System.out.println("Pacote de dados perdido, pedir retransmissão de fragmento...");
-                socket.send(new DatagramPacket((String.valueOf(pckNum)).getBytes(), (String.valueOf(pckNum)).getBytes().length , socket.getInetAddress(), socket.getPort()));
-            }
-        }
-        System.out.println("Pacote de dados recebido com sucesso");
-        this.isOcupied = false;
         return pacote;
     }
 

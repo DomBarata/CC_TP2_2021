@@ -63,7 +63,7 @@ public class FSChunk {
         this.isfragmented = Boolean.parseBoolean(str[0]);
         this.tag = str[1];
         if(!str[2].isEmpty() && !this.isfragmented)
-            this.file = str[2].substring(0,str[2].length()-4);
+            this.file = str[2].substring(0,str[2].length()-4); //TODO - MANTER A PARTE DA POSIÇÃO NO FILENAME
         else
             this.file = str[2];
         try{
@@ -71,7 +71,6 @@ public class FSChunk {
         }catch (ArrayIndexOutOfBoundsException e){
             this.data = "".getBytes();
         }
-
     }
 
     public int quantosPackets(int max){
@@ -96,6 +95,24 @@ public class FSChunk {
         int tam = max-str.length();
 
         byte[] frag = Arrays.copyOfRange(this.data, pos*tam, pos*tam+tam);
+
+        str += new String(frag);
+
+        return str.getBytes();
+    }
+
+    public byte[] getFragment(int pos, int max, byte[] data){ //TODO - está bem? fiquei confusa com isto -mel
+        boolean estafragmentado = true;
+
+        if(quantosPackets(max)-1 == pos)
+            estafragmentado = false;
+
+        String str;
+
+        str = estafragmentado + "::" + this.tag + "::" + this.file + String.format("%04d", pos) + "::";
+        int tam = max-str.length();
+
+        byte[] frag = Arrays.copyOfRange(data, pos*tam, pos*tam+tam);
 
         str += new String(frag);
 

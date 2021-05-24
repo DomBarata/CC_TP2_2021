@@ -1,13 +1,14 @@
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-// TODO - FALTAM GERIR OS PACOTES FRAGMENTADOS, TANTO DO LADO DO GTW COMO DO SRV
-// HÁ UM "ERRO" NOS FICHEIROS RECEBIDOS, UMA DAS STRINGS É VAZIA, É NECESSÁRIO VER
+// TODO - CORRIGIR - DEPOIS DO CICLO WHILE DE PACOTES FRAGMENTADOS, VAI SEGUIR PARA O SWITCH E NÃO É SUSPOSTO
+// HÁ UM "ERRO" NOS FICHEIROS RECEBIDOS, UMA DAS STRINGS É VAZIA, É NECESSÁRIO VER - not important
 // AS COMUNICAÇÕES ESTÃO OK, MESMO AQUELAS COM OS PEDIDOS HTTP
-// PARA OS ENVIOS FRAGMENTADOS, TALVEZ ALTERAR A FRAGMENTAÇAO PARA UM BYTE[][] E FAZER FORA (SRV)
+// PARA OS ENVIOS FRAGMENTADOS, TALVEZ ALTERAR A FRAGMENTAÇAO PARA UM BYTE[][] E FAZER FORA (SRV) - acho que isto está resolvido com o metodo getfragment do fschunk
 
 public class HTTPgw {
     // Socket UDP para comunicar com o 'FastFileServer'
@@ -55,12 +56,29 @@ public class HTTPgw {
         });
         parser.start();
 
-
         Thread udpReceiveThread = new Thread(() -> {
             while (true) {
-                FSChunk f = null;
+                FSChunk f;
                 try {
                     f = udpReceiveProtocol.receive();
+                    FSChunk pacote = new FSChunk(f.senderIpAddress, f.senderPort, FSChunkProtocol.trim(f.data));
+                    while(pacote.isfragmented){
+                        if (socketInterno.containsKey(f.senderIpAddress)){
+                            FSChunkProtocol conn = new FSChunkProtocol(new DatagramSocket(), f.senderIpAddress, f.senderPort+1);
+                            System.out.println("A unir fragmentos de dados...");
+                            try {
+                                FSChunk aux = udpReceiveProtocol.receive();
+                                pacote.complete(aux);
+                                conn.setOcupied(false);
+                            }catch (SocketTimeoutException E){
+                                System.out.println("Pacote de dados perdido, pedir retransmissão de fragmento...");
+                                FSChunk askMore = new FSChunk("RESEND",f.file,"".getBytes());
+                                conn.send(askMore);
+                                conn.setOcupied(true);
+                            }
+                        }else
+                            System.out.println("Pedido malicoso: Servidor não autenticado");
+                    } System.out.println("Pacote de dados recebido com sucesso");
                     if (f != null) {
                         switch (f.tag) {
                             case "A":  // Autenticação by Server
@@ -72,14 +90,14 @@ public class HTTPgw {
                                         System.out.println("Novo servidor autenticado: " + f.senderIpAddress + " " + (f.senderPort+1));
                                         FSChunk listOfFiles = new FSChunk("LR", "".getBytes());
                                         newCon.send(listOfFiles);
+                                        newCon.setOcupied(true);
                                     } catch (SocketException | UnknownHostException e) {
                                         e.printStackTrace();
                                     }
                                 } else
-                                    System.out.println("Tentativa da ataque!!!!");
+                                    System.out.println("Server já autenticado ou password errada!");
                                 break;
                             case "LR": // List of files sent by Server
-
                                 if(socketInterno.containsKey(f.senderIpAddress)){
                                     System.out.println("A receber lista de nomes de ficheiros de servidor...");
                                     List<String> ficheiros = f.getDataList();
@@ -96,7 +114,6 @@ public class HTTPgw {
                                 }
                                 break;
                             case "FR":
-
                                 if(socketInterno.containsKey(f.senderIpAddress)) {
                                     System.out.println("A receber ficheiro...");
                                     fileData.put(f.file, f.data);
