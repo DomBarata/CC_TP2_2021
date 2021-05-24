@@ -4,7 +4,9 @@ import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.InetSocketAddress;
+import java.net.*;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 public class test {
@@ -77,8 +79,19 @@ public static void main(String[] args) throws Exception {
         }
         }
     */
-    public static void main(String[] args) {
-        Map<Integer, List<Integer>> map = new HashMap<>();
+
+    static DatagramSocket teste;
+
+    static {
+        try {
+            teste = new DatagramSocket();
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+      /*  Map<Integer, List<Integer>> map = new HashMap<>();
         List<Integer> lista = new ArrayList<>();
         lista.add(1);
         lista.add(2);
@@ -88,7 +101,50 @@ public static void main(String[] args) throws Exception {
             map.get(i).add(10);
             map.get(i).forEach(inteiro -> System.out.println(inteiro));
         }
+ */
+/*
+      Thread t = new Thread(()->{
+            byte[] bytearray = new byte[508];
+            try {
+                teste.receive(new DatagramPacket(bytearray,508));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
 
+        t.start();
+        System.out.println("estou aqui");
+
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        try {
+            teste.setSoTimeout(1);
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+
+        System.out.println("aqui, vai terminar");
+
+
+ */
+        LocalDateTime hora = LocalDateTime.now();
+
+
+        ArrayDeque<Integer> teste = new ArrayDeque<>();
+        teste.push(1);
+        teste.push(2);
+
+        System.out.println(teste.removeLast());
+
+        Thread.sleep(2000);
+
+        System.out.println(hora.until(LocalDateTime.now(), ChronoUnit.SECONDS));
     }
+
+
 }
 

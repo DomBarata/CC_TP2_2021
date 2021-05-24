@@ -1,9 +1,13 @@
 import java.io.*;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+
+// TODO - FALTAM GERIR OS PACOTES FRAGMENTADOS, TANTO DO LADO DO GTW COMO DO SRV
+// HÁ UM "ERRO" NOS FICHEIROS RECEBIDOS, UMA DAS STRINGS É VAZIA, É NECESSÁRIO VER
+// AS COMUNICAÇÕES ESTÃO OK, MESMO AQUELAS COM OS PEDIDOS HTTP
+// PARA OS ENVIOS FRAGMENTADOS, TALVEZ ALTERAR A FRAGMENTAÇAO PARA UM BYTE[][] E FAZER FORA (SRV)
 
 public class HTTPgw {
     // Socket UDP para comunicar com o 'FastFileServer'
@@ -17,6 +21,9 @@ public class HTTPgw {
     private final static ReentrantLock clientlock = new ReentrantLock();
     private static final Condition condition = clientlock.newCondition();
 
+    private static ArrayDeque<Pedido> pedidosPendentes = new ArrayDeque<>();
+    private static final int timedout = 60;
+
     public static void main(String[] args) throws IOException {
 
         ServerSocket httpSocket;
@@ -29,7 +36,7 @@ public class HTTPgw {
             e.printStackTrace();
         }
 
-        udpReceiveProtocol = new FSChunkProtocol(udpReceiveSocket);
+        udpReceiveProtocol = new FSChunkProtocol(udpReceiveSocket, timedout * 1000);
 
         System.out.println("Ativo em " + InetAddress.getLocalHost().getHostAddress() + " " + udpReceiveSocket.getLocalPort());
 
@@ -38,7 +45,7 @@ public class HTTPgw {
                 try {
                     //HTTP GET
                     Socket client = httpSocket.accept();
-                    System.out.println("ola");
+                    System.out.println("A receber pedido HTTP...");
                     Thread t = new Thread(new WorkerHTTP(client));
                     t.start();
                 } catch (IOException e) {
@@ -54,29 +61,30 @@ public class HTTPgw {
                 FSChunk f = null;
                 try {
                     f = udpReceiveProtocol.receive();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                if (f != null) {
-                    switch (f.tag) {
-                        case "A":  // Autenticação by Server
-                                    if (!socketInterno.containsKey(f.senderIpAddress) && password.equals(new String(f.data))) {
-                                        try {
-                                            FSChunkProtocol newCon = new FSChunkProtocol(new DatagramSocket(), f.senderIpAddress, f.senderPort);
+                    if (f != null) {
+                        switch (f.tag) {
+                            case "A":  // Autenticação by Server
+                                System.out.println("A receber pedido de autenticação...");
+                                if (!socketInterno.containsKey(f.senderIpAddress) && password.equals(new String(f.data))) {
+                                    try {
+                                        FSChunkProtocol newCon = new FSChunkProtocol(new DatagramSocket(), f.senderIpAddress, f.senderPort+1);
+                                        socketInterno.put(f.senderIpAddress, newCon);
+                                        System.out.println("Novo servidor autenticado: " + f.senderIpAddress + " " + (f.senderPort+1));
+                                        FSChunk listOfFiles = new FSChunk("LR", "".getBytes());
+                                        newCon.send(listOfFiles);
+                                    } catch (SocketException | UnknownHostException e) {
+                                        e.printStackTrace();
+                                    }
+                                } else
+                                    System.out.println("Tentativa da ataque!!!!");
+                                break;
+                            case "LR": // List of files sent by Server
 
-                                            socketInterno.put(f.senderIpAddress, newCon);
-                                            System.out.println("Novo servidor autenticado: " + f.senderIpAddress);
-                                            FSChunk listOfFiles = new FSChunk("LR", "".getBytes());
-                                            newCon.send(listOfFiles);
-                                        } catch (SocketException | UnknownHostException e) {
-                                            e.printStackTrace();
-                                        }
-                                    } else
-                                        System.out.println("Tentativa da ataque!!!!");
-                                    break;
-                        case "LR": // List of files sent by Server
+                                if(socketInterno.containsKey(f.senderIpAddress)){
+                                    System.out.println("A receber lista de nomes de ficheiros de servidor...");
                                     List<String> ficheiros = f.getDataList();
                                     for (String fich : ficheiros) {
+                                        System.out.println("\t- " + fich);
                                         if (ficheirosServer.containsKey(fich))
                                             ficheirosServer.get(fich).add(f.senderIpAddress);
                                         else {
@@ -85,12 +93,19 @@ public class HTTPgw {
                                             ficheirosServer.put(fich, l);
                                         }
                                     }
-                                    break;
-                        case "FS":
+                                }
+                                break;
+                            case "FR":
+
+                                if(socketInterno.containsKey(f.senderIpAddress)) {
+                                    System.out.println("A receber ficheiro...");
                                     fileData.put(f.file, f.data);
                                     condition.signalAll();
-                                    break;
-                        case "CLOSE":
+                                    System.out.println("Ficheiro recebido!");
+                                }
+                                break;
+                            case "CLOSE":
+                                if(socketInterno.containsKey(f.senderIpAddress)) {
                                     FSChunkProtocol fs = socketInterno.remove(f.senderIpAddress);
                                     ficheirosServer.remove(f.senderIpAddress);
                                     try {
@@ -98,13 +113,31 @@ public class HTTPgw {
                                     } catch (Exception e) {
                                         e.printStackTrace();
                                     }
-                                    break;
-                        case "EMPTY":
-                        default:
-                                    System.out.println("ERRO HTTPGW:89 (switch udps)");
-                                    System.out.println("TAG recebida : " + f.tag);
-                                    break;
+                                }
+                                break;
+                            case "EMPTY":
+                            default:
+                                System.out.println("ERRO HTTPGW: 114 (switch udps)");
+                                System.out.println("TAG recebida : " + f.tag);
+                                break;
+                        }
+                        socketInterno.get(f.senderIpAddress).setOcupied(false);
                     }
+                } catch (SocketTimeoutException e) {
+                    System.out.println("A verificar servidores...");
+                    int i = 0;
+                    if(!pedidosPendentes.isEmpty())
+                        while(pedidosPendentes.getLast().getTime()>timedout){
+                            Pedido old = pedidosPendentes.removeLast();
+                            socketInterno.remove(old.getServer());
+                            FSChunkProtocol fs = selectServer(old.getFilename());
+                            fs.send(new FSChunk("FR", old.getFilename(), "".getBytes()));
+                            pedidosPendentes.push(new Pedido(old.getFilename(), fs.ipDestino.getHostAddress()));
+                            i++;
+                        }
+                    System.out.println("Servidores verificados. Foram removidos " + i + " servidores!");
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
         });
@@ -185,6 +218,19 @@ public class HTTPgw {
         };
     }
 
+    private static FSChunkProtocol selectServer(String ficheiro){
+        FSChunkProtocol destino = null;
+        Random random = new Random();
+        if(!ficheirosServer.isEmpty() && ficheirosServer.containsKey(ficheiro)) {
+            do {
+                int r = random.nextInt(ficheirosServer.get(ficheiro).size());
+                String s = ficheirosServer.get(ficheiro).get(r);
+                destino = socketInterno.get(s);
+            }while(destino.isOcupied());
+        }
+        return destino;
+    }
+
     static class WorkerHTTP implements Runnable{
         private Socket client;
 
@@ -193,12 +239,17 @@ public class HTTPgw {
         }
 
         private FSChunkProtocol selectServer(String ficheiro){
+            System.out.println("A selecionar servidor para pedir ficheiro...");
             FSChunkProtocol destino = null;
             Random random = new Random();
-            //TODO - verificar se há FFSrvs
-            int r = random.nextInt(ficheirosServer.get(ficheiro).size());
-            String s = ficheirosServer.get(ficheiro).get(r);
-            destino = socketInterno.get(s);
+            if(!ficheirosServer.isEmpty() && ficheirosServer.containsKey(ficheiro)) {
+                do {
+                    int r = random.nextInt(ficheirosServer.get(ficheiro).size());
+                    String s = ficheirosServer.get(ficheiro).get(r);
+                    destino = socketInterno.get(s);
+                }while(destino.isOcupied());
+            }
+            System.out.println("Servidor para pedir ficheiro: " + destino.ipDestino);
             return destino;
         }
 
@@ -212,23 +263,38 @@ public class HTTPgw {
                 String[] request = httprequest.split(" ");
                 String ficheiro = request[1].substring(1);
 
-                System.out.println(ficheiro);
+                System.out.println("Pedido HTTP: " + "\"" + ficheiro + "\"");
 
-                if(!fileData.containsKey(ficheiro))
-                    selectServer(ficheiro).send(new FSChunk("FR", ficheiro, "".getBytes()));
-                while(!fileData.containsKey(ficheiro)) {
-                    condition.await();
+                try {
+                    FSChunkProtocol fs = null;
+                    if (!fileData.containsKey(ficheiro))
+                        fs = selectServer(ficheiro);
+                        fs.send(new FSChunk("FR", ficheiro, "".getBytes()));
+                        pedidosPendentes.add(new Pedido(ficheiro, fs.ipDestino.getHostAddress()));
+                    while(!fileData.containsKey(ficheiro) && !socketInterno.isEmpty()) {
+                        condition.await();
+                    }
+
+                    fileData.get(ficheiro);
+
+                    System.out.println("Envio do ficheiro solicitado: \"" + ficheiro + "\"");
+                    //HTTP RESPONSE
+                    clienteOut.write("HTTP/1.1 200 OK\r\n".getBytes());
+                    clienteOut.write(("Content-Length: " + fileData.get(ficheiro).length + "\r\n").getBytes());
+                    clienteOut.write(("Content-Type: " + getExtensao(ficheiro) + ";\r\n\r\n").getBytes());
+                    clienteOut.write(fileData.get(ficheiro));
+                    clienteOut.flush();
+                } catch (NullPointerException e){
+                    System.out.println("Ficheiro \"" + ficheiro + "\"" + " não encontrado.\n Resposta de erro.");
+                    clienteOut.write("HTTP/1.1 404 Not Found\r\n".getBytes());
+                    clienteOut.write(("Content-Length: " + 0 + "\r\n").getBytes());
+                    clienteOut.write(("Content-Type: " + "text/html" + ";\r\n\r\n").getBytes());
+                    clienteOut.flush();
                 }
-
-                //HTTP RESPONSE
-                clienteOut.write("HTTP/1.1 200 OK\r\n".getBytes());
-                clienteOut.write(("Content-Length: " + fileData.get(ficheiro).length + "\r\n").getBytes());
-                clienteOut.write(("Content-Type: " + getExtensao(ficheiro) + ";\r\n\r\n").getBytes());
-                clienteOut.write(fileData.get(ficheiro));
-                clienteOut.flush();
             } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
-            } finally{
+            }
+            finally{
                 clientlock.unlock();
             }
                 

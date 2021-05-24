@@ -1,8 +1,8 @@
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.IOException;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
@@ -12,46 +12,49 @@ import java.util.List;
 
 
 public class FastFileServer {
-    private static FSChunkProtocol protocol;
+    private static FSChunkProtocol protocolToSend;
+    private static FSChunkProtocol protocolToReceive;
 
     public static void main(String[] args) throws UnknownHostException {
-        String ip = args[0];
-        int port = Integer.parseInt(args[1]);
-        DatagramSocket socket = null;
+        String ipGateway = args[0];
+        int portGateway = Integer.parseInt(args[1]);
+        DatagramSocket socketSend = null;
+        DatagramSocket socketReceive = null;
 
         try {
-            socket = new DatagramSocket();
+            socketSend = new DatagramSocket();
+        } catch (SocketException e) {
+            e.printStackTrace();
+            System.out.println("Erro a conectar com o gateway");
+        }
+
+        try {
+            socketReceive = new DatagramSocket(socketSend.getLocalPort()+1);
         } catch (SocketException e) {
             e.printStackTrace();
         }
 
-        if(socket == null) { System.out.println("Erro a conectar com o gateway"); return;}
-
-        protocol = new FSChunkProtocol(socket, ip, port);
+        protocolToReceive = new FSChunkProtocol(socketReceive,InetAddress.getLocalHost().getHostAddress(),socketReceive.getLocalPort());
+        protocolToSend = new FSChunkProtocol(socketSend, ipGateway, portGateway);
 
 
         //protocol.receive();
         FSChunk autentica = new FSChunk("A","PASSWORD".getBytes());
-        protocol.send(autentica); //Autentica-se junto do HttpGw, indicando o seu IP e porta e confirmando a PASSWORD
+        protocolToSend.send(autentica); //Autentica-se junto do HttpGw, indicando o seu IP e porta e confirmando a PASSWORD
         //get dados de file no server
 
-        FSChunk chunk = null;
-        try {
-            chunk = protocol.receive();
-        } catch (IOException e) {
-            System.out.println("Conexão perdida...");
-            return;
-        }
+        System.out.println("A autenticar-se ao gateway");
 
-        FSChunk finalChunk = chunk;
+
         Thread response = new Thread(() -> {
-            try {
-                processChunks(finalChunk, protocol);
-
-            } catch (Exception e) {
-                e.printStackTrace();
+            while(true) {
+                try {
+                    FSChunk chunk = protocolToReceive.receive();
+                    processChunks(chunk, protocolToSend);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
-
         });
         response.start();
 
@@ -63,25 +66,35 @@ public class FastFileServer {
         try {
             switch (tag) {
                 case "LR":
-                    //GET LIST OF FILE NAMES
-                    List <String> ficheiros = new ArrayList<String>();
-                    File[] files = new File("/path").listFiles();
-                    ByteArrayOutputStream bytearray = new ByteArrayOutputStream();
-                    DataOutputStream out = new DataOutputStream(bytearray);
-                    for(File f: files) {
-                        if (f.isFile()) {
-                            ficheiros.add(f.getName());
+                    if(received.senderIpAddress.equals(protocolToSend.ipDestino.getHostAddress())) {
+                        System.out.println("A receber pedido de ficheiros");
+                        //GET LIST OF FILE NAMES
+                        List<String> ficheiros = new ArrayList<String>();
+                        File[] files = new File(".").listFiles();
+                        ByteArrayOutputStream bytearray = new ByteArrayOutputStream();
+                        DataOutputStream out = new DataOutputStream(bytearray);
+                        System.out.println("Lista de ficheiros: ");
+                        for (File f : files) {
+                            if (f.isFile()) {
+                                ficheiros.add(f.getName());
+                                System.out.println("\t- " + f.getName());
+                            }
                         }
+                        FSChunk fsc = new FSChunk("LR", "".getBytes());
+                        fsc.setData(ficheiros);
+                        connection.send(fsc);
+                        System.out.println("Lista de ficheiros enviada!!");
                     }
-                    FSChunk fsc = new FSChunk("LR","".getBytes());
-                    fsc.setData(ficheiros);
-                    connection.send(fsc);
                     break;
                 case "FR" :
-                    //FILE REQUEST
-                    byte[] filebytes = Files.readAllBytes(Paths.get("/path"+received.file));
-                    FSChunk fsck = new FSChunk("FR",filebytes);
-                    connection.send(fsck);
+                    if(received.senderIpAddress.equals(protocolToSend.ipDestino.getHostAddress())) {
+                        System.out.println("Ficheiro pedido: " + "\"" + received.file + "\"");
+                        //FILE REQUEST
+                        byte[] filebytes = Files.readAllBytes(Paths.get(received.file));
+                        FSChunk fsck = new FSChunk("FR", filebytes);
+                        connection.send(fsck);
+                        System.out.println("Ficheiro enviado!");
+                    }
                     break;
                 case "CLOSE" :
                     //SEND CLOSE TAG AND CLOSE UDP CONNECTION

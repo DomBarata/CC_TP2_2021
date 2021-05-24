@@ -5,7 +5,7 @@ import java.util.List;
 public class FSChunk {
     public boolean isfragmented;
     public final String tag;
-    public final String file;
+    public String file;
     public byte[] data;
     public final String senderIpAddress;
     public final int senderPort;
@@ -38,48 +38,48 @@ public class FSChunk {
     }
 
     public FSChunk(byte[] array){
-        if(array.length != 0){
-            String[] str = new String(array).split("::");
-
-            this.isfragmented = Boolean.parseBoolean(str[0]);
-            this.tag = str[1];
-            this.senderIpAddress = str[2];
-            this.senderPort = Integer.parseInt(str[3]);
-            this.file = str[2];
-            this.data = str[5].getBytes();
-        }else{
-            this.isfragmented = false;
-            this.tag = "EMPTY";
-            this.senderIpAddress = "";
-            this.senderPort = -1;
+        this.senderIpAddress = "";
+        this.senderPort = -1;
+        String string = new String(array);
+        String[] str = string.split("::");
+        this.isfragmented = Boolean.parseBoolean(str[0]);
+        this.tag = str[1];
+        if(!str[2].isEmpty() && !this.isfragmented)
+            this.file = str[2].substring(0,str[2].length()-4);
+        else
             this.file = "";
-            this.data = new byte[0];
+        try{
+            this.data = str[3].getBytes();
+        }catch (ArrayIndexOutOfBoundsException e){
+            this.data = "".getBytes();
         }
     }
 
     public FSChunk(String address, int port, byte[] array){
         this.senderIpAddress = address;
         this.senderPort = port;
-        if(array.length != 0){
-            String string = new String(array);
-            String[] str = string.split("::");
-            this.isfragmented = Boolean.parseBoolean(str[0]);
-            this.tag = str[1];
+        String string = new String(array);
+        String[] str = string.split("::");
+        this.isfragmented = Boolean.parseBoolean(str[0]);
+        this.tag = str[1];
+        if(!str[2].isEmpty() && !this.isfragmented)
+            this.file = str[2].substring(0,str[2].length()-4);
+        else
             this.file = str[2];
+        try{
             this.data = str[3].getBytes();
-        }else{
-            this.isfragmented = false;
-            this.tag = "EMPTY";
-            this.file = "";
-            this.data = new byte[0];
+        }catch (ArrayIndexOutOfBoundsException e){
+            this.data = "".getBytes();
         }
+
     }
 
     public int quantosPackets(int max){
         int tamFixo = 1 + 2 + this.tag.length() + 2 + this.file.length() + 4 + 2;
         float capacidade = max - tamFixo;
-
-        float qtd = this.data.length/capacidade;
+        float qtd;
+        if(this.data.length == 0) qtd = 1;
+        else qtd = this.data.length/capacidade;
 
         return (int) Math.ceil(qtd);
     }
@@ -106,7 +106,7 @@ public class FSChunk {
     public void setData(List<String> ficheiros){
         String data = "";
         for (String s : ficheiros){
-            data += "::" + s;
+            data += ":/" + s;
         }
         this.data = data.getBytes();
     }
@@ -117,7 +117,7 @@ public class FSChunk {
      */
     public List<String> getDataList(){
         String data = new String(this.data);
-        String[] ficheiros = data.split("::");
+        String[] ficheiros = data.split(":/");
 
         List<String> files = new ArrayList<>();
 
@@ -135,6 +135,8 @@ public class FSChunk {
 
         this.data = data.getBytes();
 
-        if(!aux.isfragmented) this.isfragmented = false;
+        if(!aux.isfragmented) {
+            this.isfragmented = false;
+        }
     }
 }

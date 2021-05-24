@@ -1,16 +1,16 @@
 import java.io.IOException;
 import java.net.*;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class FSChunkProtocol implements AutoCloseable {
     public final DatagramSocket socket;
     public final int safeSize = 508;
     public final InetAddress ipDestino;
     public final int portaDestino;
+    private boolean isOcupied;
 
-    public FSChunkProtocol(DatagramSocket datagramSocket, int timedout, String ip, int port) throws UnknownHostException {
+    public FSChunkProtocol(DatagramSocket datagramSocket, int timedout) throws UnknownHostException {
         this.socket = datagramSocket;
         try {
             this.socket.setSoTimeout(timedout);
@@ -18,16 +18,12 @@ public class FSChunkProtocol implements AutoCloseable {
             socket.close();
             System.out.println("Socket fechado");
         }
-
-        this.ipDestino = InetAddress.getByName(ip);
-
-        this.portaDestino = port;
+        this.ipDestino = InetAddress.getByName("");
+        this.portaDestino = -1;
     }
     public FSChunkProtocol(DatagramSocket datagramSocket) throws UnknownHostException {
         this.socket = datagramSocket;
-
         this.ipDestino = InetAddress.getByName("");
-
         this.portaDestino = -1;
     }
 
@@ -41,27 +37,17 @@ public class FSChunkProtocol implements AutoCloseable {
         byte[][] aEnviar = fragmenta(frame);
 
         try {
-            for(int i = 0; i < aEnviar.length; i++) { //falta ver o safe size
+            System.out.println("A enviar pacote de dados...");
+            for(int i = 0; i < aEnviar.length; i++) {
                 DatagramPacket pedido = new DatagramPacket(aEnviar[i], aEnviar[i].length, this.ipDestino, this.portaDestino);
                 socket.send(pedido);
             }
-
+            System.out.println("Pacote de dados enviado com sucesso");
         } catch (IOException e) {
             e.printStackTrace();
         }
+        this.isOcupied = true;
     }
-
-/*
-    public void send(byte[] bytes) {
-        byte[] aEnviar = new byte[0];
-        DatagramPacket pedido = new DatagramPacket(aEnviar, aEnviar.length, socket.getInetAddress(), socket.getPort());
-        try {
-            socket.send(pedido);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-*/
 
     private byte[][] fragmenta(FSChunk frame) {
         int tam = frame.quantosPackets(safeSize);
@@ -74,29 +60,42 @@ public class FSChunkProtocol implements AutoCloseable {
         return fragmentado;
     }
 
-    public FSChunk receive() throws IOException {
+    public FSChunk receive() throws IOException { //TODO - Retransmissão
 
+        System.out.println("À escuta...");
         byte[] aReceber = new byte[safeSize];
 
         DatagramPacket pedido = new DatagramPacket(aReceber, safeSize);
 
 
         socket.receive(pedido);
-
+        int pckNum = 0;
         FSChunk pacote = new FSChunk(pedido.getAddress().getHostAddress(), pedido.getPort(), trim(pedido.getData()));
-
+       // pckNum  = Integer.parseInt(pacote.file.substring(pacote.file.length()-4));
         while(pacote.isfragmented){
+            System.out.println("A unir fragmentos de dados...");
             try {
+                socket.send(new DatagramPacket(String.valueOf(pckNum+1).getBytes(), String.valueOf(pckNum+1).getBytes().length , socket.getInetAddress(), socket.getPort()));
                 socket.receive(pedido);
-                FSChunk aux = new FSChunk(pedido.getData());
+                FSChunk aux = new FSChunk(trim(pedido.getData()));
+                pckNum = Integer.parseInt(aux.file.substring(aux.file.length()-4));
                 pacote.complete(aux);
-                socket.send(new DatagramPacket("mandaMais".getBytes(), "mandaMais".getBytes().length , socket.getInetAddress(), socket.getPort()));
             }catch (SocketTimeoutException E){
-                socket.send(new DatagramPacket("mandaMais".getBytes(), "mandaMais".getBytes().length , socket.getInetAddress(), socket.getPort()));
+                System.out.println("Pacote de dados perdido, pedir retransmissão de fragmento...");
+                socket.send(new DatagramPacket((String.valueOf(pckNum)).getBytes(), (String.valueOf(pckNum)).getBytes().length , socket.getInetAddress(), socket.getPort()));
             }
         }
-
+        System.out.println("Pacote de dados recebido com sucesso");
+        this.isOcupied = false;
         return pacote;
+    }
+
+    public boolean isOcupied(){
+        return this.isOcupied;
+    }
+
+    public void setOcupied(boolean isOcupied){
+        this.isOcupied = isOcupied;
     }
 
     @Override
