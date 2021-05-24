@@ -44,10 +44,7 @@ public class FSChunk {
         String[] str = string.split("::");
         this.isfragmented = Boolean.parseBoolean(str[0]);
         this.tag = str[1];
-        if(!str[2].isEmpty() && !this.isfragmented)
-            this.file = str[2].substring(0,str[2].length()-4);
-        else
-            this.file = "";
+        this.file = str[2];
         try{
             this.data = str[3].getBytes();
         }catch (ArrayIndexOutOfBoundsException e){
@@ -62,10 +59,7 @@ public class FSChunk {
         String[] str = string.split("::");
         this.isfragmented = Boolean.parseBoolean(str[0]);
         this.tag = str[1];
-        if(!str[2].isEmpty() && !this.isfragmented)
-            this.file = str[2].substring(0,str[2].length()-4); //TODO - MANTER A PARTE DA POSIÇÃO NO FILENAME
-        else
-            this.file = str[2];
+        this.file = str[2];
         try{
             this.data = str[3].getBytes();
         }catch (ArrayIndexOutOfBoundsException e){
@@ -101,25 +95,6 @@ public class FSChunk {
         return str.getBytes();
     }
 
-    public byte[] getFragment(int pos, int max, byte[] data){ //TODO - está bem? fiquei confusa com isto -mel
-        boolean estafragmentado = true;
-
-        if(quantosPackets(max)-1 == pos)
-            estafragmentado = false;
-
-        String str;
-
-        str = estafragmentado + "::" + this.tag + "::" + this.file + String.format("%04d", pos) + "::";
-        int tam = max-str.length();
-
-        byte[] frag = Arrays.copyOfRange(data, pos*tam, pos*tam+tam);
-
-        str += new String(frag);
-
-        return str.getBytes();
-    }
-
-
     public void setData(List<String> ficheiros){
         String data = "";
         for (String s : ficheiros){
@@ -154,6 +129,24 @@ public class FSChunk {
 
         if(!aux.isfragmented) {
             this.isfragmented = false;
+        }
+    }
+
+    public int getFragmentNumber(){
+        int num;
+        try {
+            num = Integer.parseInt(this.file.substring(this.file.length() - 4));
+        }catch (ArrayIndexOutOfBoundsException | NumberFormatException e){
+            num = -1;
+        }
+        return num; //-1 means error
+    }
+
+    public void filenameClean(){
+        try {
+            this.file = this.file.substring(0, this.file.length() - 4);
+        }catch (ArrayIndexOutOfBoundsException ignored){
+
         }
     }
 }

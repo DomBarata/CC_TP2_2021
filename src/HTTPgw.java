@@ -6,8 +6,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 // TODO - CORRIGIR - DEPOIS DO CICLO WHILE DE PACOTES FRAGMENTADOS, VAI SEGUIR PARA O SWITCH E NÃO É SUSPOSTO
-// TODO - ALTERAR - TIMEOUT NOT WORKING - GUARDAR NUMA LISTA MAYBE INTEIROS DO RECEBIDO E NO ÚLTIMO CHECKAR SE
-//  O TAMANHO DA LISTA É IGUAL AO NR ESPERADO DE FRAGMENTOS ESPERADOS, SE NÃO FOR, VER O QUE FALTA E PEDIR
 // HÁ UM "ERRO" NOS FICHEIROS RECEBIDOS, UMA DAS STRINGS É VAZIA, É NECESSÁRIO VER - not important
 // AS COMUNICAÇÕES ESTÃO OK, MESMO AQUELAS COM OS PEDIDOS HTTP
 // PARA OS ENVIOS FRAGMENTADOS, TALVEZ ALTERAR A FRAGMENTAÇAO PARA UM BYTE[][] E FAZER FORA (SRV) - acho que isto está resolvido com o metodo getfragment do fschunk
@@ -27,8 +25,9 @@ public class HTTPgw {
     private static ArrayDeque<Pedido> pedidosPendentes = new ArrayDeque<>();
     private static final int timedout = 60;
 
-    public static void main(String[] args) throws IOException {
+    private static Map<String, List<FSChunk>> ficheirosRecebidos = new HashMap<>();
 
+    public static void main(String[] args) throws IOException {
         ServerSocket httpSocket;
         httpSocket = new ServerSocket(8080);
 
@@ -64,23 +63,40 @@ public class HTTPgw {
                 try {
                     f = udpReceiveProtocol.receive();
                     FSChunk pacote = new FSChunk(f.senderIpAddress, f.senderPort, FSChunkProtocol.trim(f.data));
-                    while(pacote.isfragmented){
-                        if (socketInterno.containsKey(f.senderIpAddress)){
+                    if (socketInterno.containsKey(f.senderIpAddress)){
+                        while(pacote.isfragmented){
+                            //TODO - ADD À LISTA E MAPA
                             FSChunkProtocol conn = new FSChunkProtocol(new DatagramSocket(), f.senderIpAddress, f.senderPort+1);
                             System.out.println("A unir fragmentos de dados...");
                             try {
                                 FSChunk aux = udpReceiveProtocol.receive();
+                                ficheirosRecebidos.get(aux.file).sort((o1, o2) -> {
+                                    int r = -1;
+                                    if (o1.getFragmentNumber() < o2.getFragmentNumber()) r = -1;
+                                    if (o1.getFragmentNumber() == o2.getFragmentNumber()) r = 0;
+                                    if (o1.getFragmentNumber() > o2.getFragmentNumber()) r = 1;
+                                    return r;
+                                });
+                                if(ficheirosRecebidos.get(aux.file).get(ficheirosRecebidos.get(aux.file).size()-1).getFragmentNumber()==(ficheirosRecebidos.get(aux.file).size()-1)){
+                                    //TODO - complete
+                                }else{
+                                    for (int i = 0; i<ficheirosRecebidos.get(aux.file).size(); i++){
+                                        if(ficheirosRecebidos.get(aux.file).get(i).getFragmentNumber()!=i){
+                                            FSChunk resend = new FSChunk("RESEND",aux.file,"".getBytes());
+                                            conn.send(resend);
+                                            conn.setOcupied(true);
+                                        }
+                                    }
+                                }
                                 pacote.complete(aux);
                                 conn.setOcupied(false);
-                            }catch (SocketTimeoutException E){
-                                System.out.println("Pacote de dados perdido, pedir retransmissão de fragmento...");
-                                FSChunk askMore = new FSChunk("RESEND",f.file,"".getBytes());
-                                conn.send(askMore);
-                                conn.setOcupied(true);
+                            }catch (SocketTimeoutException e){
+                                //TODO
                             }
-                        }else
-                            System.out.println("Pedido malicoso: Servidor não autenticado");
-                    } System.out.println("Pacote de dados recebido com sucesso");
+                        }
+                        System.out.println("Pacote de dados recebido com sucesso");
+                    }else
+                        System.out.println("Pedido malicoso: Servidor não autenticado");
                     if (f != null) {
                         switch (f.tag) {
                             case "A":  // Autenticação by Server
@@ -118,6 +134,7 @@ public class HTTPgw {
                             case "FR":
                                 if(socketInterno.containsKey(f.senderIpAddress)) {
                                     System.out.println("A receber ficheiro...");
+                                    f.filenameClean();
                                     fileData.put(f.file, f.data);
                                     condition.signalAll();
                                     System.out.println("Ficheiro recebido!");

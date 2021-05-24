@@ -87,14 +87,13 @@ public class FastFileServer {
                 case "RESEND" :
                     int pos = Integer.parseInt(received.file.substring(received.file.length()-4));
                     if(!received.file.isEmpty()) {
-                        //TODO - VERIFICAR MÉTODO GETFRAGMENT NO FSCHUNK
-                        byte[] fragment = received.getFragment(pos, protocolToSend.safeSize, Files.readAllBytes(Paths.get(received.file)));
-                        FSChunk fragmentResend = new FSChunk("RESEND",received.file,fragment);
-                        connection.send(fragmentResend);
+                        FSChunk fs = new FSChunk("FR", received.file, Files.readAllBytes(Paths.get(received.file)));
+                        byte[] dadosEmFalta = fs.getData(pos,connection.safeSize);
+                        connection.send(dadosEmFalta);
                     }else{
-                        byte[] fragment = received.getFragment(pos, protocolToSend.safeSize, getFiles());
-                        FSChunk fragmentResend = new FSChunk("RESEND", fragment);
-                        connection.send(fragmentResend);
+                        FSChunk fs = new FSChunk("LR", getFiles());
+                        byte[] dadosEmFalta = fs.getData(pos,connection.safeSize);
+                        connection.send(dadosEmFalta);
                     }
                 case "CLOSE" :
                     //SEND CLOSE TAG AND CLOSE UDP CONNECTION

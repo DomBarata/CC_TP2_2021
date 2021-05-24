@@ -49,6 +49,21 @@ public class FSChunkProtocol implements AutoCloseable {
         this.isOcupied = true;
     }
 
+    public void send(byte[] aEnviar){ // Este metodo parte do principio que os dados já vêm com a convenção do fragmento
+        try {
+            System.out.println("A enviar pacote de dados...");
+
+            DatagramPacket pedido = new DatagramPacket(aEnviar, aEnviar.length, this.ipDestino, this.portaDestino);
+            socket.send(pedido);
+
+            System.out.println("Pacote de dados enviado com sucesso");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        this.isOcupied = true;
+    }
+
     private byte[][] fragmenta(FSChunk frame) {
         int tam = frame.quantosPackets(safeSize);
         byte[][] fragmentado = new byte[tam][];
