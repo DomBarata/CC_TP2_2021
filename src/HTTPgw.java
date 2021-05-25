@@ -1,6 +1,8 @@
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -332,6 +334,8 @@ public class HTTPgw {
                     }
 
                     fileData.get(ficheiro);
+
+                    byte [] ficheiroQuePreciso = Files.readAllBytes(Path.of("test.html"));
 
                     System.out.println("Envio do ficheiro solicitado: \"" + ficheiro + "\"");
                     //HTTP RESPONSE
