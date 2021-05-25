@@ -3,7 +3,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public class FSChunk {
-    public boolean isfragmented;
+    private int isfragmented;
     public final String tag;
     public String file;
     public byte[] data;
@@ -16,7 +16,7 @@ public class FSChunk {
         this.senderPort = senderPort;
         this.file = file;
         this.data = data;
-        this.isfragmented = false;
+        this.isfragmented = 0;
     }
 
     public FSChunk(String tag, String file, byte[] data) {
@@ -25,7 +25,7 @@ public class FSChunk {
         this.senderPort = -1;
         this.file = file;
         this.data = data;
-        this.isfragmented = false;
+        this.isfragmented = 0;
     }
 
     public FSChunk(String tag, byte[] data) {
@@ -34,7 +34,7 @@ public class FSChunk {
         this.senderPort = -1;
         this.file = "";
         this.data = data;
-        this.isfragmented = false;
+        this.isfragmented = 0;
     }
 
     public FSChunk(byte[] array){
@@ -42,7 +42,7 @@ public class FSChunk {
         this.senderPort = -1;
         String string = new String(array);
         String[] str = string.split("::");
-        this.isfragmented = Boolean.parseBoolean(str[0]);
+        this.isfragmented = Integer.parseInt(str[0]);
         this.tag = str[1];
         this.file = str[2];
         try{
@@ -57,7 +57,7 @@ public class FSChunk {
         this.senderPort = port;
         String string = new String(array);
         String[] str = string.split("::");
-        this.isfragmented = Boolean.parseBoolean(str[0]);
+        this.isfragmented = Integer.parseInt(str[0]);
         this.tag = str[1];
         this.file = str[2];
         try{
@@ -78,10 +78,10 @@ public class FSChunk {
     }
 
     public byte[] getData(int pos, int max){ //pos começa em 0
-        boolean estafragmentado = true;
+        int estafragmentado = 1;
 
         if(quantosPackets(max)-1 == pos)
-            estafragmentado = false;
+            estafragmentado = 0;
 
         String str;
 
@@ -127,8 +127,8 @@ public class FSChunk {
 
         this.data = data.getBytes();
 
-        if(!aux.isfragmented) {
-            this.isfragmented = false;
+        if(aux.isfragmented==0) {
+            this.isfragmented = 0;
         }
     }
 
@@ -148,5 +148,18 @@ public class FSChunk {
         }catch (ArrayIndexOutOfBoundsException ignored){
 
         }
+    }
+
+    public String getFileClean(){
+        try {
+            return this.file.substring(0, this.file.length() - 4);
+        }catch (ArrayIndexOutOfBoundsException e){
+            return this.file;
+        }
+    }
+
+    public boolean isfragmented(){
+        if(this.isfragmented == 1) return true;
+        else return false;
     }
 }

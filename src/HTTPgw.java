@@ -5,7 +5,6 @@ import java.util.*;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-// TODO - CORRIGIR - DEPOIS DO CICLO WHILE DE PACOTES FRAGMENTADOS, VAI SEGUIR PARA O SWITCH E NÃO É SUSPOSTO
 // HÁ UM "ERRO" NOS FICHEIROS RECEBIDOS, UMA DAS STRINGS É VAZIA, É NECESSÁRIO VER - not important
 // AS COMUNICAÇÕES ESTÃO OK, MESMO AQUELAS COM OS PEDIDOS HTTP
 // PARA OS ENVIOS FRAGMENTADOS, TALVEZ ALTERAR A FRAGMENTAÇAO PARA UM BYTE[][] E FAZER FORA (SRV) - acho que isto está resolvido com o metodo getfragment do fschunk
@@ -24,8 +23,6 @@ public class HTTPgw {
 
     private static ArrayDeque<Pedido> pedidosPendentes = new ArrayDeque<>();
     private static final int timedout = 60;
-
-    private static Map<String, List<FSChunk>> ficheirosRecebidos = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
         ServerSocket httpSocket;
@@ -60,52 +57,64 @@ public class HTTPgw {
         Thread udpReceiveThread = new Thread(() -> {
             while (true) {
                 FSChunk f;
+                List<FSChunk> listaFragmentos = new ArrayList<>();
                 try {
+                    System.out.println("À escuta...1");
                     f = udpReceiveProtocol.receive();
-                    FSChunk pacote = new FSChunk(f.senderIpAddress, f.senderPort, FSChunkProtocol.trim(f.data));
-                    if (socketInterno.containsKey(f.senderIpAddress)){
-                        while(pacote.isfragmented){
-                            //TODO - ADD À LISTA E MAPA
-                            FSChunkProtocol conn = new FSChunkProtocol(new DatagramSocket(), f.senderIpAddress, f.senderPort+1);
-                            System.out.println("A unir fragmentos de dados...");
-                            try {
-                                FSChunk aux = udpReceiveProtocol.receive();
-                                ficheirosRecebidos.get(aux.file).sort((o1, o2) -> {
-                                    int r = -1;
-                                    if (o1.getFragmentNumber() < o2.getFragmentNumber()) r = -1;
-                                    if (o1.getFragmentNumber() == o2.getFragmentNumber()) r = 0;
-                                    if (o1.getFragmentNumber() > o2.getFragmentNumber()) r = 1;
-                                    return r;
-                                });
-                                if(ficheirosRecebidos.get(aux.file).get(ficheirosRecebidos.get(aux.file).size()-1).getFragmentNumber()==(ficheirosRecebidos.get(aux.file).size()-1)){
-                                    //TODO - complete
-                                }else{
-                                    for (int i = 0; i<ficheirosRecebidos.get(aux.file).size(); i++){
-                                        if(ficheirosRecebidos.get(aux.file).get(i).getFragmentNumber()!=i){
-                                            FSChunk resend = new FSChunk("RESEND",aux.file,"".getBytes());
-                                            conn.send(resend);
-                                            conn.setOcupied(true);
-                                        }
+                    if (socketInterno.containsKey(f.senderIpAddress) && f.isfragmented()) {
+                        FSChunkProtocol conn = socketInterno.get(f.senderIpAddress);
+                        listaFragmentos.add(f);
+
+                        System.out.println("A unir fragmentos de dados...");
+                        int t = 0;
+                        while (f.isfragmented()) {
+                            udpReceiveProtocol.socket.setSoTimeout(timedout*1000);
+                            System.out.println("À escuta... "+t++);
+                            f = udpReceiveProtocol.receive();
+                            listaFragmentos.add(f);
+                        }
+                        System.out.println("A verificar dados completos...");
+                        listaFragmentos.sort((o1, o2) -> {
+                            int r = -2;
+                            if (o1.getFragmentNumber() < o2.getFragmentNumber()) r = -1;
+                            if (o1.getFragmentNumber() == o2.getFragmentNumber()) r = 0;
+                            if (o1.getFragmentNumber() > o2.getFragmentNumber()) r = 1;
+                            return r;
+                        });
+                        boolean flag = true;
+
+                        while(flag) {
+                            if (listaFragmentos.get(listaFragmentos.size() - 1).getFragmentNumber() == (listaFragmentos.size() - 1)) {
+                                f = listaFragmentos.get(0);
+
+                                for (int i = 1; i < listaFragmentos.size(); i++)
+                                    f.complete(listaFragmentos.get(i));
+
+
+                                System.out.println("Pacotes de dados unidos com sucesso!");
+                                flag = false;
+                            } else {
+                                for (int i = 0; i < listaFragmentos.size(); i++) {
+                                    System.out.println("Falha a receber dados, a pedir fragmentos em falta...");
+                                    if (listaFragmentos.get(i).getFragmentNumber() != i) {
+                                        FSChunk resend = new FSChunk("RESEND", f.file, "".getBytes());
+                                        conn.send(resend);
+                                        f = udpReceiveProtocol.receive();
                                     }
                                 }
-                                pacote.complete(aux);
-                                conn.setOcupied(false);
-                            }catch (SocketTimeoutException e){
-                                //TODO
                             }
                         }
                         System.out.println("Pacote de dados recebido com sucesso");
-                    }else
-                        System.out.println("Pedido malicoso: Servidor não autenticado");
+                    }
                     if (f != null) {
                         switch (f.tag) {
                             case "A":  // Autenticação by Server
                                 System.out.println("A receber pedido de autenticação...");
                                 if (!socketInterno.containsKey(f.senderIpAddress) && password.equals(new String(f.data))) {
                                     try {
-                                        FSChunkProtocol newCon = new FSChunkProtocol(new DatagramSocket(), f.senderIpAddress, f.senderPort+1);
+                                        FSChunkProtocol newCon = new FSChunkProtocol(new DatagramSocket(), f.senderIpAddress, f.senderPort + 1);
                                         socketInterno.put(f.senderIpAddress, newCon);
-                                        System.out.println("Novo servidor autenticado: " + f.senderIpAddress + " " + (f.senderPort+1));
+                                        System.out.println("Novo servidor autenticado: " + f.senderIpAddress + " " + (f.senderPort + 1));
                                         FSChunk listOfFiles = new FSChunk("LR", "".getBytes());
                                         newCon.send(listOfFiles);
                                         newCon.setOcupied(true);
@@ -116,7 +125,7 @@ public class HTTPgw {
                                     System.out.println("Server já autenticado ou password errada!");
                                 break;
                             case "LR": // List of files sent by Server
-                                if(socketInterno.containsKey(f.senderIpAddress)){
+                                if (socketInterno.containsKey(f.senderIpAddress)) {
                                     System.out.println("A receber lista de nomes de ficheiros de servidor...");
                                     List<String> ficheiros = f.getDataList();
                                     for (String fich : ficheiros) {
@@ -132,16 +141,21 @@ public class HTTPgw {
                                 }
                                 break;
                             case "FR":
-                                if(socketInterno.containsKey(f.senderIpAddress)) {
-                                    System.out.println("A receber ficheiro...");
-                                    f.filenameClean();
-                                    fileData.put(f.file, f.data);
-                                    condition.signalAll();
-                                    System.out.println("Ficheiro recebido!");
+                                clientlock.lock();
+                                try{
+                                    if (socketInterno.containsKey(f.senderIpAddress)) {
+                                        f.filenameClean();
+                                        fileData.put(f.file, f.data);
+                                        condition.signalAll();
+                                        System.out.println("Ficheiro recebido!");
+                                    }
+                                }finally {
+                                    clientlock.unlock();
                                 }
+
                                 break;
                             case "CLOSE":
-                                if(socketInterno.containsKey(f.senderIpAddress)) {
+                                if (socketInterno.containsKey(f.senderIpAddress)) {
                                     FSChunkProtocol fs = socketInterno.remove(f.senderIpAddress);
                                     ficheirosServer.remove(f.senderIpAddress);
                                     try {
@@ -158,21 +172,27 @@ public class HTTPgw {
                                 break;
                         }
                         socketInterno.get(f.senderIpAddress).setOcupied(false);
+                        listaFragmentos.clear();
                     }
-                } catch (SocketTimeoutException e) {
+                } catch(SocketTimeoutException e){
                     System.out.println("A verificar servidores...");
                     int i = 0;
-                    if(!pedidosPendentes.isEmpty())
-                        while(pedidosPendentes.getLast().getTime()>timedout){
+                    if (!pedidosPendentes.isEmpty())
+                        while (pedidosPendentes.getLast().getTime() > timedout) {
                             Pedido old = pedidosPendentes.removeLast();
                             socketInterno.remove(old.getServer());
                             FSChunkProtocol fs = selectServer(old.getFilename());
-                            fs.send(new FSChunk("FR", old.getFilename(), "".getBytes()));
-                            pedidosPendentes.push(new Pedido(old.getFilename(), fs.ipDestino.getHostAddress()));
-                            i++;
+                            if(!(fs==null)) {
+                                fs.send(new FSChunk("FR", old.getFilename(), "".getBytes()));
+                                pedidosPendentes.push(new Pedido(old.getFilename(), fs.ipDestino.getHostAddress()));
+                                i++;
+                            }else{
+                                condition.signalAll();//TODO
+                                break;
+                            }
                         }
                     System.out.println("Servidores verificados. Foram removidos " + i + " servidores!");
-                } catch (IOException e) {
+                } catch(IOException e){
                     e.printStackTrace();
                 }
             }
@@ -257,7 +277,7 @@ public class HTTPgw {
     private static FSChunkProtocol selectServer(String ficheiro){
         FSChunkProtocol destino = null;
         Random random = new Random();
-        if(!ficheirosServer.isEmpty() && ficheirosServer.containsKey(ficheiro)) {
+        if(!socketInterno.isEmpty() && !ficheirosServer.isEmpty() && ficheirosServer.containsKey(ficheiro)) {
             do {
                 int r = random.nextInt(ficheirosServer.get(ficheiro).size());
                 String s = ficheirosServer.get(ficheiro).get(r);
@@ -278,7 +298,7 @@ public class HTTPgw {
             System.out.println("A selecionar servidor para pedir ficheiro...");
             FSChunkProtocol destino = null;
             Random random = new Random();
-            if(!ficheirosServer.isEmpty() && ficheirosServer.containsKey(ficheiro)) {
+            if(!socketInterno.isEmpty() && !ficheirosServer.isEmpty() && ficheirosServer.containsKey(ficheiro)) {
                 do {
                     int r = random.nextInt(ficheirosServer.get(ficheiro).size());
                     String s = ficheirosServer.get(ficheiro).get(r);

@@ -34,15 +34,10 @@ public class FastFileServer {
         protocolToReceive = new FSChunkProtocol(socketReceive,InetAddress.getLocalHost().getHostAddress(),socketReceive.getLocalPort());
         protocolToSend = new FSChunkProtocol(socketSend, ipGateway, portGateway);
 
-
-        //protocol.receive();
         FSChunk autentica = new FSChunk("A","PASSWORD".getBytes());
         protocolToSend.send(autentica); //Autentica-se junto do HttpGw, indicando o seu IP e porta e confirmando a PASSWORD
-        //get dados de file no server
 
         System.out.println("A autenticar-se ao gateway");
-
-
         Thread response = new Thread(() -> {
             while(true) {
                 try {
@@ -54,11 +49,9 @@ public class FastFileServer {
             }
         });
         response.start();
-
     }
 
 
-    //FALTA RECEBER O PATH
     private static void processChunks(FSChunk received,FSChunkProtocol connection){
         String tag = received.tag;
         try {
@@ -67,19 +60,18 @@ public class FastFileServer {
                     if(received.senderIpAddress.equals(protocolToSend.ipDestino.getHostAddress())) {
                         System.out.println("A receber pedido de ficheiros");
                         //GET LIST OF FILE NAMES
-                        List<String> ficheiros = new ArrayList<String>();
                         FSChunk fsc = new FSChunk("LR", getFiles());
-                        fsc.setData(ficheiros);
                         connection.send(fsc);
                         System.out.println("Lista de ficheiros enviada!!");
                     }
                     break;
                 case "FR" :
                     if(received.senderIpAddress.equals(protocolToSend.ipDestino.getHostAddress())) {
-                        System.out.println("Ficheiro pedido: " + "\"" + received.file + "\"");
+                        System.out.println("Ficheiro pedido: " + "\"" + received.getFileClean() + "\"");
                         //FILE REQUEST
+                        received.filenameClean();
                         byte[] filebytes = Files.readAllBytes(Paths.get(received.file));
-                        FSChunk fsck = new FSChunk("FR", filebytes);
+                        FSChunk fsck = new FSChunk("FR", received.file, filebytes);
                         connection.send(fsck);
                         System.out.println("Ficheiro enviado!");
                     }
@@ -87,6 +79,7 @@ public class FastFileServer {
                 case "RESEND" :
                     int pos = Integer.parseInt(received.file.substring(received.file.length()-4));
                     if(!received.file.isEmpty()) {
+                        received.filenameClean();
                         FSChunk fs = new FSChunk("FR", received.file, Files.readAllBytes(Paths.get(received.file)));
                         byte[] dadosEmFalta = fs.getData(pos,connection.safeSize);
                         connection.send(dadosEmFalta);
@@ -117,7 +110,6 @@ public class FastFileServer {
         List<String> ficheiros = new ArrayList<String>();
         File[] files = new File(".").listFiles();
         ByteArrayOutputStream bytearray = new ByteArrayOutputStream();
-        DataOutputStream out = new DataOutputStream(bytearray);
         System.out.println("Lista de ficheiros: ");
         for (File f : files) {
             if (f.isFile()) {
@@ -125,9 +117,9 @@ public class FastFileServer {
                 System.out.println("\t- " + f.getName());
             }
         }
-        String data = "";
-        for (String s : ficheiros){
-            data += ":/" + s;
+        String data = ficheiros.get(0);
+        for (int i = 1; i<ficheiros.size(); i++){
+            data += ":/" + ficheiros.get(i);
         }
         return data.getBytes();
     }

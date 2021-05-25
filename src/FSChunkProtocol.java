@@ -39,6 +39,7 @@ public class FSChunkProtocol implements AutoCloseable {
         try {
             System.out.println("A enviar pacote de dados...");
             for(int i = 0; i < aEnviar.length; i++) {
+                System.out.println(i+"/"+aEnviar.length);
                 DatagramPacket pedido = new DatagramPacket(aEnviar[i], aEnviar[i].length, this.ipDestino, this.portaDestino);
                 socket.send(pedido);
             }
@@ -76,7 +77,6 @@ public class FSChunkProtocol implements AutoCloseable {
     }
 
     public FSChunk receive() throws IOException {
-        System.out.println("À escuta...");
         byte[] aReceber = new byte[safeSize];
 
         DatagramPacket pedido = new DatagramPacket(aReceber, safeSize);
